@@ -1,24 +1,81 @@
 import os
 import json
 import datetime
-from flask import Flask, render_template, request, redirect, url_for, flash, jsonify
+
+from flask import Flask, render_template, request, redirect, url_for, flash
+from flask_login import (
+    LoginManager, login_user, logout_user,
+    login_required, current_user
+)
+from werkzeug.security import generate_password_hash, check_password_hash
 import plotly.express as px
 import plotly.utils
 from dotenv import load_dotenv
 
 from database.connection import engine, Base, SessionLocal
-from database.models import Account, CreditCard, Transaction, TransactionTypeEnum, PeriodicityEnum
+from database.models import User, Account, CreditCard, Transaction, TransactionTypeEnum, PeriodicityEnum
 from core.projections import generate_cashflow_projection
 
 load_dotenv()
 
-# Inicializar Base de Datos
+# ──────────────────────────────────────────────
+# INICIALIZACIÓN DE BASE DE DATOS
+# ──────────────────────────────────────────────
 Base.metadata.create_all(bind=engine)
 
+# ──────────────────────────────────────────────
+# APLICACIÓN FLASK
+# ──────────────────────────────────────────────
 app = Flask(__name__)
-app.secret_key = os.getenv("SECRET_KEY", "finance-secret-key-12345")
+app.secret_key = os.getenv("SECRET_KEY", "cambia-esta-clave-antes-de-produccion")
 
-# Filtro Jinja2 para formatear moneda: $ XXX XXX XXX,XX
+# ──────────────────────────────────────────────
+# FLASK-LOGIN: Configuración del gestor de sesiones
+# ──────────────────────────────────────────────
+login_manager = LoginManager()
+login_manager.init_app(app)
+login_manager.login_view = "login"           # Ruta a la que redirige si no está autenticado
+login_manager.login_message = "Por favor inicia sesión para acceder."
+login_manager.login_message_category = "warning"
+
+@login_manager.user_loader
+def load_user(user_id):
+    """Callback requerido por Flask-Login para recargar el usuario desde la sesión."""
+    db = SessionLocal()
+    try:
+        return db.query(User).get(int(user_id))
+    finally:
+        db.close()
+
+
+# ──────────────────────────────────────────────
+# INICIALIZACIÓN DEL USUARIO ADMINISTRADOR
+# Se ejecuta una sola vez al arrancar la app.
+# Lee ADMIN_USERNAME y ADMIN_PASSWORD de las variables de entorno.
+# ──────────────────────────────────────────────
+def init_admin_user():
+    """Crea el usuario administrador si no existe aún en la base de datos."""
+    admin_username = os.getenv("ADMIN_USERNAME", "admin")
+    admin_password = os.getenv("ADMIN_PASSWORD", "changeme123")
+
+    db = SessionLocal()
+    try:
+        existing = db.query(User).filter_by(username=admin_username).first()
+        if not existing:
+            hashed = generate_password_hash(admin_password)
+            admin = User(username=admin_username, password_hash=hashed)
+            db.add(admin)
+            db.commit()
+            print(f"[INFO] Usuario administrador '{admin_username}' creado correctamente.")
+    finally:
+        db.close()
+
+init_admin_user()
+
+
+# ──────────────────────────────────────────────
+# FILTRO JINJA2: Formateo monetario $ XXX XXX,XX
+# ──────────────────────────────────────────────
 @app.template_filter('format_currency')
 def format_currency_filter(value):
     if value is None:
@@ -27,33 +84,80 @@ def format_currency_filter(value):
         val = float(value)
     except (ValueError, TypeError):
         return "$ 0,00"
-    
     parts = f"{val:,.2f}".split('.')
-    # Formato con espacio como separador de miles y coma como separador decimal
     integer_part = parts[0].replace(',', ' ')
     decimal_part = parts[1]
     return f"$ {integer_part},{decimal_part}"
 
+
+# ──────────────────────────────────────────────
+# UTILIDAD: Parsear montos con formato visual
+# ──────────────────────────────────────────────
 def parse_currency(value_str):
-    """
-    Parsea strings del formato "$ 1 234 567,89" o "1234567.89" a float
-    """
+    """Convierte '$ 1 234 567,89' → 1234567.89 (float)."""
     if not value_str:
         return 0.0
     if isinstance(value_str, (int, float)):
         return float(value_str)
-    
-    cleaned = str(value_str).replace('$', '').replace(' ', '').replace('.', '').replace(',', '.').strip()
+    cleaned = (
+        str(value_str)
+        .replace('$', '')
+        .replace(' ', '')
+        .replace('.', '')
+        .replace(',', '.')
+        .strip()
+    )
     try:
         return float(cleaned)
     except ValueError:
-        # Fallback simple
+        return 0.0
+
+
+# ══════════════════════════════════════════════
+# RUTAS DE AUTENTICACIÓN
+# ══════════════════════════════════════════════
+
+@app.route('/login', methods=['GET', 'POST'])
+def login():
+    if current_user.is_authenticated:
+        return redirect(url_for('index'))
+
+    if request.method == 'POST':
+        username = request.form.get('username', '').strip()
+        password = request.form.get('password', '')
+
+        db = SessionLocal()
         try:
-            return float(str(value_str).replace('$', '').replace(' ', '').strip())
-        except ValueError:
-            return 0.0
+            user = db.query(User).filter_by(username=username).first()
+        finally:
+            db.close()
+
+        if user and check_password_hash(user.password_hash, password):
+            login_user(user, remember=True)
+            # Redirige a la página que intentaban visitar antes del login, si existe
+            next_page = request.args.get('next')
+            flash(f"Bienvenido, {user.username}.", "success")
+            return redirect(next_page or url_for('index'))
+        else:
+            flash("Usuario o contraseña incorrectos. Intenta de nuevo.", "danger")
+
+    return render_template('login.html')
+
+
+@app.route('/logout')
+@login_required
+def logout():
+    logout_user()
+    flash("Sesión cerrada correctamente.", "info")
+    return redirect(url_for('login'))
+
+
+# ══════════════════════════════════════════════
+# RUTAS PROTEGIDAS: DASHBOARD
+# ══════════════════════════════════════════════
 
 @app.route('/')
+@login_required
 def index():
     months = request.args.get('months', default=12, type=int)
     db = SessionLocal()
@@ -66,11 +170,8 @@ def index():
         total_cc_debt = sum(c.current_debt for c in cards)
         min_balance = df['balance'].min() if not df.empty else 0.0
 
-        # Crear gráfico interactivo con Plotly
         fig = px.line(
-            df, 
-            x='date', 
-            y='balance', 
+            df, x='date', y='balance',
             title="Evolución Diaria del Saldo Total Proyectado",
             labels={'date': 'Fecha', 'balance': 'Saldo ($)'}
         )
@@ -82,7 +183,6 @@ def index():
         )
         chart_json = json.dumps(fig, cls=plotly.utils.PlotlyJSONEncoder)
 
-        # Filtrar próximos eventos de los siguientes 30 días
         today = datetime.date.today()
         next_30 = today + datetime.timedelta(days=30)
         next_events = [ev for ev in events if today <= ev['date'] <= next_30]
@@ -101,10 +201,13 @@ def index():
     finally:
         db.close()
 
-# ===============================
-# RUTAS DE CUENTAS Y TARJETAS
-# ===============================
+
+# ══════════════════════════════════════════════
+# RUTAS PROTEGIDAS: CUENTAS Y TARJETAS
+# ══════════════════════════════════════════════
+
 @app.route('/products')
+@login_required
 def products_view():
     db = SessionLocal()
     try:
@@ -115,15 +218,14 @@ def products_view():
         db.close()
 
 @app.route('/accounts/add', methods=['POST'])
+@login_required
 def add_account():
     name = request.form.get('name', '').strip()
     balance = parse_currency(request.form.get('balance', '0'))
-    
     if name:
         db = SessionLocal()
         try:
-            acc = Account(name=name, balance=balance, updated_at=datetime.date.today())
-            db.add(acc)
+            db.add(Account(name=name, balance=balance, updated_at=datetime.date.today()))
             db.commit()
             flash(f"Cuenta '{name}' agregada exitosamente.", "success")
         finally:
@@ -133,6 +235,7 @@ def add_account():
     return redirect(url_for('products_view'))
 
 @app.route('/accounts/<int:id>/edit', methods=['POST'])
+@login_required
 def edit_account(id):
     db = SessionLocal()
     try:
@@ -148,6 +251,7 @@ def edit_account(id):
     return redirect(url_for('products_view'))
 
 @app.route('/accounts/<int:id>/delete', methods=['POST'])
+@login_required
 def delete_account(id):
     db = SessionLocal()
     try:
@@ -161,35 +265,30 @@ def delete_account(id):
     return redirect(url_for('products_view'))
 
 @app.route('/cards/add', methods=['POST'])
+@login_required
 def add_card():
     name = request.form.get('name', '').strip()
-    credit_limit = parse_currency(request.form.get('credit_limit', '0'))
-    current_debt = parse_currency(request.form.get('current_debt', '0'))
-    next_payment_amount = parse_currency(request.form.get('next_payment_amount', '0'))
-    statement_day = int(request.form.get('statement_day', 15))
-    due_day = int(request.form.get('due_day', 5))
-
-    if name:
-        db = SessionLocal()
-        try:
-            card = CreditCard(
-                name=name,
-                credit_limit=credit_limit,
-                current_debt=current_debt,
-                next_payment_amount=next_payment_amount,
-                statement_day=statement_day,
-                due_day=due_day
-            )
-            db.add(card)
-            db.commit()
-            flash(f"Tarjeta '{name}' agregada con éxito.", "success")
-        finally:
-            db.close()
-    else:
+    if not name:
         flash("El nombre de la tarjeta es requerido.", "danger")
+        return redirect(url_for('products_view'))
+    db = SessionLocal()
+    try:
+        db.add(CreditCard(
+            name=name,
+            credit_limit=parse_currency(request.form.get('credit_limit', '0')),
+            current_debt=parse_currency(request.form.get('current_debt', '0')),
+            next_payment_amount=parse_currency(request.form.get('next_payment_amount', '0')),
+            statement_day=int(request.form.get('statement_day', 15)),
+            due_day=int(request.form.get('due_day', 5))
+        ))
+        db.commit()
+        flash(f"Tarjeta '{name}' agregada con éxito.", "success")
+    finally:
+        db.close()
     return redirect(url_for('products_view'))
 
 @app.route('/cards/<int:id>/edit', methods=['POST'])
+@login_required
 def edit_card(id):
     db = SessionLocal()
     try:
@@ -208,6 +307,7 @@ def edit_card(id):
     return redirect(url_for('products_view'))
 
 @app.route('/cards/<int:id>/delete', methods=['POST'])
+@login_required
 def delete_card(id):
     db = SessionLocal()
     try:
@@ -220,10 +320,13 @@ def delete_card(id):
         db.close()
     return redirect(url_for('products_view'))
 
-# ===============================
-# RUTAS DE MOVIMIENTOS
-# ===============================
+
+# ══════════════════════════════════════════════
+# RUTAS PROTEGIDAS: MOVIMIENTOS
+# ══════════════════════════════════════════════
+
 @app.route('/movements')
+@login_required
 def movements_view():
     db = SessionLocal()
     try:
@@ -231,9 +334,9 @@ def movements_view():
         cards = db.query(CreditCard).all()
         today_str = datetime.date.today().isoformat()
         return render_template(
-            'movements.html', 
-            active_page='movements', 
-            transactions=transactions, 
+            'movements.html',
+            active_page='movements',
+            transactions=transactions,
             cards=cards,
             today=today_str
         )
@@ -241,6 +344,7 @@ def movements_view():
         db.close()
 
 @app.route('/movements/add', methods=['POST'])
+@login_required
 def add_movement():
     description = request.form.get('description', '').strip()
     amount = parse_currency(request.form.get('amount', '0'))
@@ -259,8 +363,6 @@ def add_movement():
     except ValueError:
         start_date = datetime.date.today()
 
-    enum_type = TransactionTypeEnum.expense if type_str == "Gasto" else TransactionTypeEnum.income
-    
     credit_card_id = None
     if payment_method.startswith('card_'):
         try:
@@ -269,37 +371,30 @@ def add_movement():
             credit_card_id = None
 
     periodicity_map = {
-        "Única": PeriodicityEnum.unique,
-        "Semanal": PeriodicityEnum.weekly,
-        "Quincenal": PeriodicityEnum.biweekly,
-        "Mensual": PeriodicityEnum.monthly,
-        "Bimestral": PeriodicityEnum.bimonthly,
-        "Semestral": PeriodicityEnum.semiannual,
+        "Única": PeriodicityEnum.unique, "Semanal": PeriodicityEnum.weekly,
+        "Quincenal": PeriodicityEnum.biweekly, "Mensual": PeriodicityEnum.monthly,
+        "Bimestral": PeriodicityEnum.bimonthly, "Semestral": PeriodicityEnum.semiannual,
         "Anual": PeriodicityEnum.annual
     }
     enum_periodicity = periodicity_map.get(periodicity_str, PeriodicityEnum.monthly) if is_recurring else PeriodicityEnum.unique
+    enum_type = TransactionTypeEnum.expense if type_str == "Gasto" else TransactionTypeEnum.income
 
     db = SessionLocal()
     try:
-        tx = Transaction(
-            description=description,
-            amount=amount,
-            start_date=start_date,
-            is_recurring=is_recurring,
-            is_active=True,
-            periodicity=enum_periodicity,
-            type=enum_type,
+        db.add(Transaction(
+            description=description, amount=amount, start_date=start_date,
+            is_recurring=is_recurring, is_active=True,
+            periodicity=enum_periodicity, type=enum_type,
             credit_card_id=credit_card_id
-        )
-        db.add(tx)
+        ))
         db.commit()
         flash("Movimiento registrado con éxito.", "success")
     finally:
         db.close()
-
     return redirect(url_for('movements_view'))
 
 @app.route('/movements/<int:id>/toggle', methods=['POST'])
+@login_required
 def toggle_movement(id):
     db = SessionLocal()
     try:
@@ -307,13 +402,13 @@ def toggle_movement(id):
         if tx:
             tx.is_active = not tx.is_active
             db.commit()
-            state_str = "activado" if tx.is_active else "pausado"
-            flash(f"Movimiento '{tx.description}' {state_str}.", "info")
+            flash(f"Movimiento '{tx.description}' {'activado' if tx.is_active else 'pausado'}.", "info")
     finally:
         db.close()
     return redirect(url_for('movements_view'))
 
 @app.route('/movements/<int:id>/delete', methods=['POST'])
+@login_required
 def delete_movement(id):
     db = SessionLocal()
     try:
@@ -326,6 +421,10 @@ def delete_movement(id):
         db.close()
     return redirect(url_for('movements_view'))
 
+
+# ──────────────────────────────────────────────
+# PUNTO DE ENTRADA
+# ──────────────────────────────────────────────
 if __name__ == '__main__':
     port = int(os.getenv("PORT", 5000))
-    app.run(host='0.0.0.0', port=port, debug=True)
+    app.run(host='0.0.0.0', port=port, debug=os.getenv("FLASK_DEBUG", "false").lower() == "true")

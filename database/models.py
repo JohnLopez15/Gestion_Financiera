@@ -1,8 +1,14 @@
 from sqlalchemy import Column, Integer, String, Float, Boolean, Date, Enum, ForeignKey
 from sqlalchemy.orm import relationship
+from flask_login import UserMixin
 from .connection import Base
 import enum
 import datetime
+
+
+# ──────────────────────────────────────────────
+# ENUMERACIONES
+# ──────────────────────────────────────────────
 
 class PeriodicityEnum(str, enum.Enum):
     unique = "Única"
@@ -17,6 +23,34 @@ class TransactionTypeEnum(str, enum.Enum):
     income = "Ingreso"
     expense = "Gasto"
 
+
+# ──────────────────────────────────────────────
+# MODELO DE USUARIO (Autenticación)
+# ──────────────────────────────────────────────
+
+class User(UserMixin, Base):
+    """
+    Modelo de usuario para autenticación.
+    - UserMixin provee los métodos requeridos por Flask-Login:
+      is_authenticated, is_active, is_anonymous, get_id()
+    - La contraseña NUNCA se guarda en texto plano; se almacena
+      su hash generado con werkzeug.security.
+    """
+    __tablename__ = "users"
+
+    id = Column(Integer, primary_key=True, index=True)
+    username = Column(String(80), unique=True, nullable=False, index=True)
+    password_hash = Column(String(255), nullable=False)
+    created_at = Column(Date, default=datetime.date.today)
+
+    def __repr__(self):
+        return f"<User {self.username}>"
+
+
+# ──────────────────────────────────────────────
+# MODELOS FINANCIEROS
+# ──────────────────────────────────────────────
+
 class Account(Base):
     __tablename__ = "accounts"
 
@@ -24,8 +58,9 @@ class Account(Base):
     name = Column(String, index=True)
     balance = Column(Float, default=0.0)
     updated_at = Column(Date, default=datetime.date.today)
-    
+
     transactions = relationship("Transaction", back_populates="account")
+
 
 class CreditCard(Base):
     __tablename__ = "credit_cards"
@@ -35,10 +70,11 @@ class CreditCard(Base):
     credit_limit = Column(Float, default=0.0)
     current_debt = Column(Float, default=0.0)
     next_payment_amount = Column(Float, default=0.0)
-    statement_day = Column(Integer) # Día de corte (1-31)
-    due_day = Column(Integer)       # Día de pago (1-31)
+    statement_day = Column(Integer)   # Día de corte (1-31)
+    due_day = Column(Integer)         # Día de pago (1-31)
 
     transactions = relationship("Transaction", back_populates="credit_card")
+
 
 class Transaction(Base):
     __tablename__ = "transactions"
@@ -47,15 +83,14 @@ class Transaction(Base):
     description = Column(String)
     amount = Column(Float)
     start_date = Column(Date)
-    
+
     is_recurring = Column(Boolean, default=False)
     is_active = Column(Boolean, default=True)
     periodicity = Column(Enum(PeriodicityEnum), default=PeriodicityEnum.unique)
     type = Column(Enum(TransactionTypeEnum))
-    
+
     account_id = Column(Integer, ForeignKey("accounts.id"), nullable=True)
     credit_card_id = Column(Integer, ForeignKey("credit_cards.id"), nullable=True)
-    
+
     account = relationship("Account", back_populates="transactions")
     credit_card = relationship("CreditCard", back_populates="transactions")
-

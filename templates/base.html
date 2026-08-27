@@ -42,6 +42,21 @@
                         </a>
                     </li>
                 </ul>
+
+                <!-- Usuario autenticado + Cerrar sesión -->
+                {% if current_user.is_authenticated %}
+                <div class="d-flex align-items-center gap-2 ms-lg-3">
+                    <span class="navbar-text text-white-50 small d-none d-md-inline">
+                        <i class="bi bi-person-circle me-1"></i>{{ current_user.username }}
+                    </span>
+                    <form action="{{ url_for('logout') }}" method="GET" class="d-inline">
+                        <button type="submit" class="btn btn-outline-light btn-sm fw-semibold">
+                            <i class="bi bi-box-arrow-right me-1"></i>
+                            <span class="d-none d-sm-inline">Cerrar Sesión</span>
+                        </button>
+                    </form>
+                </div>
+                {% endif %}
             </div>
         </div>
     </nav>
