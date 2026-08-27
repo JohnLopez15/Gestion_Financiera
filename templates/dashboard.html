@@ -1,0 +1,179 @@
+{% extends 'base.html' %}
+
+{% block title %}Dashboard - Proyección de Flujo de Caja{% endblock %}
+
+{% block content %}
+<div class="row mb-4 align-items-center">
+    <div class="col-md-6">
+        <h2 class="fw-bold mb-0">Dashboard de Flujo de Caja</h2>
+        <p class="text-muted mb-0">Monitoreo de liquidez consolidada y proyección diaria.</p>
+    </div>
+    <div class="col-md-6 d-flex justify-content-md-end align-items-center gap-3 mt-3 mt-md-0">
+        <label for="monthsSelect" class="form-label mb-0 fw-semibold">Horizonte:</label>
+        <select id="monthsSelect" class="form-select w-auto" onchange="window.location.href='/?months=' + this.value">
+            <option value="1" {% if months == 1 %}selected{% endif %}>1 Mes</option>
+            <option value="3" {% if months == 3 %}selected{% endif %}>3 Meses</option>
+            <option value="6" {% if months == 6 %}selected{% endif %}>6 Meses</option>
+            <option value="12" {% if months == 12 %}selected{% endif %}>12 Meses (1 Año)</option>
+            <option value="24" {% if months == 24 %}selected{% endif %}>24 Meses (2 Años)</option>
+        </select>
+    </div>
+</div>
+
+<!-- Tarjetas de Resumen Rápido -->
+<div class="row g-3 mb-4">
+    <div class="col-md-4">
+        <div class="card stat-card success h-100">
+            <div class="card-body">
+                <div class="d-flex justify-content-between align-items-center">
+                    <div>
+                        <span class="text-muted text-uppercase fw-semibold small">Saldo Actual Total</span>
+                        <h3 class="fw-bold mt-2 mb-0">{{ initial_balance | format_currency }}</h3>
+                    </div>
+                    <div class="bg-success-subtle p-3 rounded-circle text-success">
+                        <i class="bi bi-bank fs-3"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-4">
+        <div class="card stat-card {% if min_balance < 0 %}danger{% else %}primary{% endif %} h-100">
+            <div class="card-body">
+                <div class="d-flex justify-content-between align-items-center">
+                    <div>
+                        <span class="text-muted text-uppercase fw-semibold small">Saldo Mínimo Proyectado</span>
+                        <h3 class="fw-bold mt-2 mb-0 {% if min_balance < 0 %}text-danger{% else %}text-primary{% endif %}">
+                            {{ min_balance | format_currency }}
+                        </h3>
+                    </div>
+                    <div class="{% if min_balance < 0 %}bg-danger-subtle text-danger{% else %}bg-primary-subtle text-primary{% endif %} p-3 rounded-circle">
+                        <i class="bi bi-shield-exclamation fs-3"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-4">
+        <div class="card stat-card h-100">
+            <div class="card-body">
+                <div class="d-flex justify-content-between align-items-center">
+                    <div>
+                        <span class="text-muted text-uppercase fw-semibold small">Deuda Total Tarjetas</span>
+                        <h3 class="fw-bold mt-2 mb-0 text-warning">{{ total_cc_debt | format_currency }}</h3>
+                    </div>
+                    <div class="bg-warning-subtle p-3 rounded-circle text-warning">
+                        <i class="bi bi-credit-card-2-front fs-3"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Banner de Alerta de Iliquidez -->
+<div class="row mb-4">
+    <div class="col-12">
+        {% if min_balance < 0 %}
+            <div class="card alert-liquidity-danger p-3 shadow-sm">
+                <div class="d-flex align-items-center gap-3">
+                    <i class="bi bi-exclamation-triangle-fill fs-2 text-danger"></i>
+                    <div>
+                        <h5 class="fw-bold mb-1">¡Alerta de Riesgo de Iliquidez!</h5>
+                        <p class="mb-0">Se proyecta que tu saldo consolidado caerá por debajo de cero, alcanzando un mínimo de <strong>{{ min_balance | format_currency }}</strong> en el horizonte de {{ months }} meses. Revisa tus gastos programados y pagos de tarjeta.</p>
+                    </div>
+                </div>
+            </div>
+        {% else %}
+            <div class="card alert-liquidity-success p-3 shadow-sm">
+                <div class="d-flex align-items-center gap-3">
+                    <i class="bi bi-check-circle-fill fs-2 text-success"></i>
+                    <div>
+                        <h5 class="fw-bold mb-1">Flujo de Caja Saludable</h5>
+                        <p class="mb-0">No se detectan quiebres de liquidez para los próximos {{ months }} meses. Tu saldo proyectado se mantiene positivo en todo el periodo.</p>
+                    </div>
+                </div>
+            </div>
+        {% endif %}
+    </div>
+</div>
+
+<!-- Gráfico Plotly -->
+<div class="row mb-4">
+    <div class="col-12">
+        <div class="card shadow-sm">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <span class="fw-bold"><i class="bi bi-graph-up me-2"></i>Evolución Diaria del Saldo Total Proyectado</span>
+            </div>
+            <div class="card-body p-2">
+                <div id="plotly-chart" style="width:100%; height:450px;"></div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Próximos Eventos -->
+<div class="row">
+    <div class="col-12">
+        <div class="card shadow-sm">
+            <div class="card-header">
+                <span class="fw-bold"><i class="bi bi-calendar-event me-2"></i>Próximos Movimientos y Pagos de Tarjeta (Próximos 30 Días)</span>
+            </div>
+            <div class="card-body p-0">
+                <div class="table-responsive">
+                    <table class="table table-hover align-middle mb-0">
+                        <thead class="table-light">
+                            <tr>
+                                <th>Fecha</th>
+                                <th>Descripción</th>
+                                <th>Categoría</th>
+                                <th class="text-end">Monto Impacto</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% if next_events %}
+                                {% for ev in next_events %}
+                                    <tr>
+                                        <td><span class="badge bg-light text-dark border">{{ ev.date }}</span></td>
+                                        <td class="fw-semibold">{{ ev.description }}</td>
+                                        <td>
+                                            {% if ev.category == 'INCOME' %}
+                                                <span class="badge badge-income">Ingreso</span>
+                                            {% elif ev.category == 'CC_PAYMENT' %}
+                                                <span class="badge bg-warning-subtle text-warning-emphasis border border-warning">Pago TC</span>
+                                            {% else %}
+                                                <span class="badge badge-expense">Gasto Cuenta</span>
+                                            {% endif %}
+                                        </td>
+                                        <td class="text-end fw-bold {% if ev.amount >= 0 %}text-success{% else %}text-danger{% endif %}">
+                                            {% if ev.amount >= 0 %}+{% endif %}{{ ev.amount | format_currency }}
+                                        </td>
+                                    </tr>
+                                {% endfor %}
+                            {% else %}
+                                <tr>
+                                    <td colspan="4" class="text-center py-4 text-muted">
+                                        <i class="bi bi-inbox fs-3 d-block mb-2"></i>
+                                        No hay movimientos programados para los próximos 30 días.
+                                    </td>
+                                </tr>
+                            {% endif %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+    document.addEventListener("DOMContentLoaded", function() {
+        const chartData = {{ chart_json | safe }};
+        if (chartData && chartData.data) {
+            Plotly.newPlot('plotly-chart', chartData.data, chartData.layout, {responsive: true, displayModeBar: false});
+        }
+    });
+</script>
+{% endblock %}
