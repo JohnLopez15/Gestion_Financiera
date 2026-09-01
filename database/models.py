@@ -31,10 +31,8 @@ class TransactionTypeEnum(str, enum.Enum):
 class User(UserMixin, Base):
     """
     Modelo de usuario para autenticación.
-    - UserMixin provee los métodos requeridos por Flask-Login:
-      is_authenticated, is_active, is_anonymous, get_id()
-    - La contraseña NUNCA se guarda en texto plano; se almacena
-      su hash generado con werkzeug.security.
+    - UserMixin provee los métodos requeridos por Flask-Login.
+    - La contraseña NUNCA se guarda en texto plano; se almacena su hash.
     """
     __tablename__ = "users"
 
@@ -60,6 +58,33 @@ class Account(Base):
     updated_at = Column(Date, default=datetime.date.today)
 
     transactions = relationship("Transaction", back_populates="account")
+    # Historial de saldos reales registrados manualmente
+    balance_history = relationship(
+        "AccountBalanceHistory",
+        back_populates="account",
+        order_by="AccountBalanceHistory.recorded_at",
+        cascade="all, delete-orphan"
+    )
+
+
+class AccountBalanceHistory(Base):
+    """
+    Registro histórico de saldos reales de una Cuenta de Ahorro/Corriente.
+    Cada vez que el usuario actualiza el saldo actual de una cuenta,
+    se guarda un snapshot con la fecha y el valor real para análisis histórico.
+    """
+    __tablename__ = "account_balance_history"
+
+    id = Column(Integer, primary_key=True, index=True)
+    account_id = Column(Integer, ForeignKey("accounts.id"), nullable=False)
+    balance = Column(Float, nullable=False)
+    recorded_at = Column(Date, default=datetime.date.today, nullable=False)
+    note = Column(String, nullable=True)  # Observación opcional del usuario
+
+    account = relationship("Account", back_populates="balance_history")
+
+    def __repr__(self):
+        return f"<AccountBalanceHistory account={self.account_id} balance={self.balance} date={self.recorded_at}>"
 
 
 class CreditCard(Base):
@@ -74,6 +99,34 @@ class CreditCard(Base):
     due_day = Column(Integer)         # Día de pago (1-31)
 
     transactions = relationship("Transaction", back_populates="credit_card")
+    # Historial de deuda real registrada manualmente
+    debt_history = relationship(
+        "CreditCardDebtHistory",
+        back_populates="credit_card",
+        order_by="CreditCardDebtHistory.recorded_at",
+        cascade="all, delete-orphan"
+    )
+
+
+class CreditCardDebtHistory(Base):
+    """
+    Registro histórico de la deuda real de una Tarjeta de Crédito.
+    Cada vez que el usuario actualiza la deuda actual de una TC,
+    se guarda un snapshot con la fecha y el valor real para análisis histórico.
+    """
+    __tablename__ = "credit_card_debt_history"
+
+    id = Column(Integer, primary_key=True, index=True)
+    credit_card_id = Column(Integer, ForeignKey("credit_cards.id"), nullable=False)
+    current_debt = Column(Float, nullable=False)
+    next_payment_amount = Column(Float, nullable=True)
+    recorded_at = Column(Date, default=datetime.date.today, nullable=False)
+    note = Column(String, nullable=True)  # Observación opcional del usuario
+
+    credit_card = relationship("CreditCard", back_populates="debt_history")
+
+    def __repr__(self):
+        return f"<CreditCardDebtHistory card={self.credit_card_id} debt={self.current_debt} date={self.recorded_at}>"
 
 
 class Transaction(Base):

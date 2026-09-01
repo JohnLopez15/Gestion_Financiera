@@ -1,15 +1,15 @@
 {% extends 'base.html' %}
 
-{% block title %}Dashboard - Proyección de Flujo de Caja{% endblock %}
+{% block title %}Dashboard - Proyección y Evolución Real{% endblock %}
 
 {% block content %}
 <div class="row mb-4 align-items-center">
     <div class="col-md-6">
         <h2 class="fw-bold mb-0">Dashboard de Flujo de Caja</h2>
-        <p class="text-muted mb-0">Monitoreo de liquidez consolidada y proyección diaria.</p>
+        <p class="text-muted mb-0">Monitoreo de liquidez consolidada, análisis histórico real y proyección predictiva.</p>
     </div>
     <div class="col-md-6 d-flex justify-content-md-end align-items-center gap-3 mt-3 mt-md-0">
-        <label for="monthsSelect" class="form-label mb-0 fw-semibold">Horizonte:</label>
+        <label for="monthsSelect" class="form-label mb-0 fw-semibold">Horizonte Predictivo:</label>
         <select id="monthsSelect" class="form-select w-auto" onchange="window.location.href='/?months=' + this.value">
             <option value="1" {% if months == 1 %}selected{% endif %}>1 Mes</option>
             <option value="3" {% if months == 3 %}selected{% endif %}>3 Meses</option>
@@ -98,15 +98,50 @@
     </div>
 </div>
 
-<!-- Gráfico Plotly -->
+<!-- SECCIÓN DE GRÁFICOS (Tabs: Proyección Futura vs Evolución Real) -->
 <div class="row mb-4">
     <div class="col-12">
         <div class="card shadow-sm">
-            <div class="card-header d-flex justify-content-between align-items-center">
-                <span class="fw-bold"><i class="bi bi-graph-up me-2"></i>Evolución Diaria del Saldo Total Proyectado</span>
+            <div class="card-header bg-white d-flex justify-content-between align-items-center flex-wrap gap-2">
+                <ul class="nav nav-tabs card-header-tabs" id="chartTabs" role="tablist">
+                    <li class="nav-item" role="presentation">
+                        <button class="nav-link active fw-bold" id="projection-tab" data-bs-toggle="tab" data-bs-target="#projection-pane" type="button" role="tab">
+                            <i class="bi bi-graph-up-arrow me-2 text-primary"></i>Proyección Predictiva (Futuro)
+                        </button>
+                    </li>
+                    <li class="nav-item" role="presentation">
+                        <button class="nav-link fw-bold" id="real-history-tab" data-bs-toggle="tab" data-bs-target="#real-history-pane" type="button" role="tab">
+                            <i class="bi bi-calendar-range me-2 text-success"></i>Evolución Histórica Real (Día a Día)
+                        </button>
+                    </li>
+                </ul>
+                <a href="{{ url_for('products_view') }}" class="btn btn-sm btn-outline-primary">
+                    <i class="bi bi-plus-circle me-1"></i>Registrar Saldo / Deuda
+                </a>
             </div>
-            <div class="card-body p-2">
-                <div id="plotly-chart" style="width:100%; height:450px;"></div>
+            <div class="card-body p-3">
+                <div class="tab-content" id="chartTabsContent">
+                    <!-- Tab 1: Gráfico Predictivo -->
+                    <div class="tab-pane fade show active" id="projection-pane" role="tabpanel">
+                        <div id="plotly-projection-chart" style="width:100%; height:450px;"></div>
+                    </div>
+
+                    <!-- Tab 2: Gráfico Histórico Real -->
+                    <div class="tab-pane fade" id="real-history-pane" role="tabpanel">
+                        {% if has_history and chart_real_json %}
+                            <div id="plotly-real-chart" style="width:100%; height:450px;"></div>
+                        {% else %}
+                            <div class="text-center py-5 text-muted">
+                                <i class="bi bi-clock-history fs-1 d-block mb-3 text-secondary"></i>
+                                <h5 class="fw-semibold">Aún no hay suficientes registros históricos</h5>
+                                <p class="mb-3">Cada vez que actualices el saldo de tus cuentas o la deuda de tus tarjetas en la sección <strong>Cuentas y Tarjetas</strong>, se graficará su avance real día a día aquí.</p>
+                                <a href="{{ url_for('products_view') }}" class="btn btn-primary">
+                                    <i class="bi bi-pencil-square me-1"></i>Registrar Primer Saldo
+                                </a>
+                            </div>
+                        {% endif %}
+                    </div>
+                </div>
             </div>
         </div>
     </div>
@@ -170,9 +205,35 @@
 {% block extra_scripts %}
 <script>
     document.addEventListener("DOMContentLoaded", function() {
-        const chartData = {{ chart_json | safe }};
-        if (chartData && chartData.data) {
-            Plotly.newPlot('plotly-chart', chartData.data, chartData.layout, {responsive: true, displayModeBar: false});
+        // Renderizar gráfico de proyección
+        const projData = {{ chart_json | safe }};
+        if (projData && projData.data) {
+            Plotly.newPlot('plotly-projection-chart', projData.data, projData.layout, {responsive: true, displayModeBar: false});
+        }
+
+        // Renderizar gráfico histórico real
+        {% if chart_real_json %}
+            const realData = {{ chart_real_json | safe }};
+            if (realData && realData.data) {
+                Plotly.newPlot('plotly-real-chart', realData.data, realData.layout, {responsive: true, displayModeBar: false});
+            }
+        {% endif %}
+
+        // Redimensionar gráficos al cambiar de tab
+        const realTab = document.getElementById('real-history-tab');
+        if (realTab) {
+            realTab.addEventListener('shown.bs.tab', function () {
+                const el = document.getElementById('plotly-real-chart');
+                if (el) Plotly.Plots.resize(el);
+            });
+        }
+
+        const projTab = document.getElementById('projection-tab');
+        if (projTab) {
+            projTab.addEventListener('shown.bs.tab', function () {
+                const el = document.getElementById('plotly-projection-chart');
+                if (el) Plotly.Plots.resize(el);
+            });
         }
     });
 </script>
