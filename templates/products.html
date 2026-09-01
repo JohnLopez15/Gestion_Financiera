@@ -3,523 +3,598 @@
 {% block title %}Cuentas y Tarjetas - Gestión Financiera{% endblock %}
 
 {% block content %}
-<div class="row mb-4">
+<div class="row mb-4 align-items-center">
+    <div class="col-md-8">
+        <h2 class="fw-bold mb-0">Cuentas Bancarias y Tarjetas de Crédito</h2>
+        <p class="text-muted mb-0">Gestiona tus productos financieros, consulta sus tablas consolidadas y actualiza sus saldos y deudas día a día.</p>
+    </div>
+    <div class="col-md-4 d-flex justify-content-md-end gap-2 mt-3 mt-md-0">
+        <button class="btn btn-primary fw-semibold" data-bs-toggle="modal" data-bs-target="#createAccountModal">
+            <i class="bi bi-bank me-1"></i> + Nueva Cuenta
+        </button>
+        <button class="btn btn-warning text-dark fw-semibold" data-bs-toggle="modal" data-bs-target="#createCardModal">
+            <i class="bi bi-credit-card me-1"></i> + Nueva Tarjeta
+        </button>
+    </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════════════ -->
+<!-- BLOQUE 1: TABLA DE CUENTAS DE AHORRO / CORRIENTES (ARRIBA)             -->
+<!-- ═══════════════════════════════════════════════════════════════════════ -->
+<div class="row mb-5">
     <div class="col-12">
-        <h2 class="fw-bold mb-0">Gestión de Cuentas y Tarjetas de Crédito</h2>
-        <p class="text-muted">Administra tus cuentas bancarias, tarjetas y registra actualizaciones de saldo con fecha para analizar la evolución real.</p>
-    </div>
-</div>
-
-<!-- Tabs de Navegación -->
-<ul class="nav nav-pills mb-4" id="productTabs" role="tablist">
-    <li class="nav-item" role="presentation">
-        <button class="nav-link active px-4 fw-semibold" id="accounts-tab" data-bs-toggle="pill" data-bs-target="#accounts-pane" type="button" role="tab">
-            <i class="bi bi-bank me-2"></i> Cuentas de Ahorro / Corriente
-        </button>
-    </li>
-    <li class="nav-item" role="presentation">
-        <button class="nav-link px-4 fw-semibold" id="cards-tab" data-bs-toggle="pill" data-bs-target="#cards-pane" type="button" role="tab">
-            <i class="bi bi-credit-card me-2"></i> Tarjetas de Crédito
-        </button>
-    </li>
-</ul>
-
-<div class="tab-content" id="productTabsContent">
-    <!-- PANEL DE CUENTAS -->
-    <div class="tab-pane fade show active" id="accounts-pane" role="tabpanel">
-        <div class="row g-4">
-            <!-- Formulario Crear Cuenta -->
-            <div class="col-lg-4">
-                <div class="card shadow-sm">
-                    <div class="card-header bg-white">
-                        <span class="fw-bold"><i class="bi bi-plus-circle me-2 text-primary"></i>Nueva Cuenta</span>
+        <div class="card shadow-sm border-0">
+            <div class="card-header bg-white py-3 d-flex justify-content-between align-items-center flex-wrap gap-2 border-bottom">
+                <div class="d-flex align-items-center gap-2">
+                    <div class="bg-primary-subtle text-primary p-2 rounded-circle">
+                        <i class="bi bi-bank fs-5"></i>
                     </div>
-                    <div class="card-body">
-                        <form id="form-create-account" action="{{ url_for('add_account') }}" method="POST">
-                            <div class="mb-3">
-                                <label for="acc_name" class="form-label fw-semibold">Nombre de la Cuenta *</label>
-                                <input type="text" class="form-control" id="acc_name" name="name" placeholder="Ej: Cuenta Ahorros Bancolombia" required>
-                            </div>
-                            <div class="mb-3">
-                                <label for="acc_balance" class="form-label fw-semibold">Saldo Inicial *</label>
-                                <input type="text" class="form-control currency-input fs-5" id="acc_balance" name="balance" value="$ 0,00" required>
-                                <div class="form-text">Monto en formato $ XXX XXX XXX,XX</div>
-                            </div>
-                            <div class="mb-3">
-                                <label for="acc_date" class="form-label fw-semibold">Fecha de Saldo *</label>
-                                <input type="date" class="form-control" id="acc_date" name="recorded_at" value="{{ today }}" required>
-                            </div>
-                            <div class="mb-3">
-                                <label for="acc_note" class="form-label fw-semibold">Nota u Observación</label>
-                                <input type="text" class="form-control" id="acc_note" name="note" placeholder="Ej: Saldo inicial apertura">
-                            </div>
-                            <div class="d-grid">
-                                <button type="submit" class="btn btn-primary fw-semibold">
-                                    <i class="bi bi-save me-1"></i> Guardar Cuenta
-                                </button>
-                            </div>
-                        </form>
+                    <div>
+                        <h5 class="fw-bold mb-0">Cuentas de Ahorro y Corrientes</h5>
+                        <small class="text-muted">Fondos líquidos disponibles para operaciones y pagos</small>
                     </div>
+                </div>
+                <div class="d-flex align-items-center gap-2">
+                    <span class="badge bg-primary-subtle text-primary fs-6 px-3 py-2">
+                        Total: {{ accounts|length }} Cuentas
+                    </span>
+                    <button class="btn btn-sm btn-outline-primary fw-semibold" data-bs-toggle="modal" data-bs-target="#createAccountModal">
+                        <i class="bi bi-plus-lg me-1"></i> Agregar Cuenta
+                    </button>
                 </div>
             </div>
 
-            <!-- Listado de Cuentas -->
-            <div class="col-lg-8">
-                <div class="card shadow-sm">
-                    <div class="card-header bg-white d-flex justify-content-between align-items-center">
-                        <span class="fw-bold"><i class="bi bi-list-check me-2"></i>Cuentas Registradas</span>
-                        <span class="badge bg-primary-subtle text-primary">{{ accounts|length }} Cuentas</span>
-                    </div>
-                    <div class="card-body p-0">
-                        <div class="table-responsive">
-                            <table class="table table-hover align-middle mb-0">
-                                <thead class="table-light">
+            <div class="card-body p-0">
+                <div class="table-responsive">
+                    <table class="table table-hover align-middle mb-0">
+                        <thead class="table-light">
+                            <tr>
+                                <th class="ps-4">Nombre de la Cuenta</th>
+                                <th class="text-end">Saldo Actual</th>
+                                <th class="text-center">Última Actualización</th>
+                                <th class="text-center">Historial Registrado</th>
+                                <th class="text-end pe-4">Acciones</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% if accounts %}
+                                {% for acc in accounts %}
                                     <tr>
-                                        <th>Nombre</th>
-                                        <th class="text-end">Saldo Actual</th>
-                                        <th class="text-center">Última Actualización</th>
-                                        <th class="text-center">Historial</th>
-                                        <th class="text-end">Acciones</th>
+                                        <td class="ps-4">
+                                            <div class="fw-bold text-dark fs-6">{{ acc.name }}</div>
+                                            <small class="text-muted">ID: #{{ acc.id }}</small>
+                                        </td>
+                                        <td class="text-end fw-bold text-success fs-6">
+                                            {{ acc.balance | format_currency }}
+                                        </td>
+                                        <td class="text-center text-muted">
+                                            <span class="badge bg-light text-secondary border px-2 py-1">
+                                                <i class="bi bi-calendar3 me-1"></i>{{ acc.updated_at }}
+                                            </span>
+                                        </td>
+                                        <td class="text-center">
+                                            <button class="btn btn-sm btn-outline-info" data-bs-toggle="modal" data-bs-target="#historyAccountModal{{ acc.id }}" title="Ver historial de saldos">
+                                                <i class="bi bi-clock-history me-1"></i>{{ acc.balance_history|length }} registros
+                                            </button>
+                                        </td>
+                                        <td class="text-end pe-4">
+                                            <!-- Botón Actualizar Saldo con Fecha -->
+                                            <button class="btn btn-sm btn-success text-white me-1 fw-semibold" data-bs-toggle="modal" data-bs-target="#newBalanceModal{{ acc.id }}" title="Registrar Saldo con Fecha">
+                                                <i class="bi bi-plus-circle me-1"></i> Actualizar Saldo
+                                            </button>
+                                            <!-- Botón Editar -->
+                                            <button class="btn btn-sm btn-outline-secondary me-1" data-bs-toggle="modal" data-bs-target="#editAccountModal{{ acc.id }}" title="Editar Nombre">
+                                                <i class="bi bi-pencil"></i>
+                                            </button>
+                                            <!-- Botón Eliminar -->
+                                            <form action="{{ url_for('delete_account', id=acc.id) }}" method="POST" class="d-inline" onsubmit="return confirm('¿Seguro que deseas eliminar esta cuenta y todo su historial?');">
+                                                <button type="submit" class="btn btn-sm btn-outline-danger" title="Eliminar Cuenta">
+                                                    <i class="bi bi-trash"></i>
+                                                </button>
+                                            </form>
+                                        </td>
                                     </tr>
-                                </thead>
-                                <tbody>
-                                    {% if accounts %}
-                                        {% for acc in accounts %}
-                                            <tr>
-                                                <td class="fw-bold">{{ acc.name }}</td>
-                                                <td class="text-end fw-bold text-success">{{ acc.balance | format_currency }}</td>
-                                                <td class="text-center text-muted small">{{ acc.updated_at }}</td>
-                                                <td class="text-center">
-                                                    <button class="btn btn-sm btn-outline-info" data-bs-toggle="modal" data-bs-target="#historyAccountModal{{ acc.id }}" title="Ver historial de saldos">
-                                                        <i class="bi bi-clock-history me-1"></i>{{ acc.balance_history|length }}
-                                                    </button>
-                                                </td>
-                                                <td class="text-end">
-                                                    <!-- Botón Registrar Nuevo Saldo -->
-                                                    <button class="btn btn-sm btn-success me-1" data-bs-toggle="modal" data-bs-target="#newBalanceModal{{ acc.id }}" title="Actualizar Saldo con Fecha">
-                                                        <i class="bi bi-plus-lg"></i> Saldo
-                                                    </button>
-                                                    <!-- Botón Editar -->
-                                                    <button class="btn btn-sm btn-outline-primary me-1" data-bs-toggle="modal" data-bs-target="#editAccountModal{{ acc.id }}" title="Editar Nombre/Saldo">
-                                                        <i class="bi bi-pencil"></i>
-                                                    </button>
-                                                    <!-- Botón Eliminar -->
-                                                    <form action="{{ url_for('delete_account', id=acc.id) }}" method="POST" class="d-inline" onsubmit="return confirm('¿Seguro que deseas eliminar esta cuenta y todo su historial?');">
-                                                        <button type="submit" class="btn btn-sm btn-outline-danger" title="Eliminar Cuenta">
-                                                            <i class="bi bi-trash"></i>
-                                                        </button>
-                                                    </form>
-                                                </td>
-                                            </tr>
-
-                                            <!-- Modal Registrar Nuevo Saldo con Fecha -->
-                                            <div class="modal fade" id="newBalanceModal{{ acc.id }}" tabindex="-1" aria-hidden="true">
-                                                <div class="modal-dialog">
-                                                    <div class="modal-content">
-                                                        <form action="{{ url_for('add_account_history_record', id=acc.id) }}" method="POST">
-                                                            <div class="modal-header bg-success text-white">
-                                                                <h5 class="modal-title fw-bold"><i class="bi bi-calendar-check me-2"></i>Actualizar Saldo: {{ acc.name }}</h5>
-                                                                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
-                                                            </div>
-                                                            <div class="modal-body">
-                                                                <p class="text-muted small mb-3">Registra el saldo real en una fecha específica para mantener la curva histórica día a día.</p>
-                                                                <div class="mb-3">
-                                                                    <label class="form-label fw-semibold">Nuevo Saldo Real *</label>
-                                                                    <input type="text" class="form-control currency-input fs-5" name="balance" value="{{ acc.balance }}" required>
-                                                                </div>
-                                                                <div class="mb-3">
-                                                                    <label class="form-label fw-semibold">Fecha del Saldo *</label>
-                                                                    <input type="date" class="form-control" name="recorded_at" value="{{ today }}" required>
-                                                                </div>
-                                                                <div class="mb-3">
-                                                                    <label class="form-label fw-semibold">Nota / Motivo</label>
-                                                                    <input type="text" class="form-control" name="note" placeholder="Ej: Balance fin de mes, Pago de nómina...">
-                                                                </div>
-                                                            </div>
-                                                            <div class="modal-footer">
-                                                                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
-                                                                <button type="submit" class="btn btn-success"><i class="bi bi-save me-1"></i>Guardar en Historial</button>
-                                                            </div>
-                                                        </form>
-                                                    </div>
-                                                </div>
-                                            </div>
-
-                                            <!-- Modal Editar Cuenta -->
-                                            <div class="modal fade" id="editAccountModal{{ acc.id }}" tabindex="-1" aria-hidden="true">
-                                                <div class="modal-dialog">
-                                                    <div class="modal-content">
-                                                        <form action="{{ url_for('edit_account', id=acc.id) }}" method="POST">
-                                                            <div class="modal-header">
-                                                                <h5 class="modal-title fw-bold">Editar Cuenta: {{ acc.name }}</h5>
-                                                                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-                                                            </div>
-                                                            <div class="modal-body">
-                                                                <div class="mb-3">
-                                                                    <label class="form-label fw-semibold">Nombre</label>
-                                                                    <input type="text" class="form-control" name="name" value="{{ acc.name }}" required>
-                                                                </div>
-                                                                <div class="mb-3">
-                                                                    <label class="form-label fw-semibold">Saldo</label>
-                                                                    <input type="text" class="form-control currency-input fs-5" name="balance" value="{{ acc.balance }}">
-                                                                </div>
-                                                                <div class="mb-3">
-                                                                    <label class="form-label fw-semibold">Fecha de Actualización</label>
-                                                                    <input type="date" class="form-control" name="recorded_at" value="{{ today }}" required>
-                                                                </div>
-                                                                <div class="mb-3">
-                                                                    <label class="form-label fw-semibold">Nota</label>
-                                                                    <input type="text" class="form-control" name="note" value="Actualización">
-                                                                </div>
-                                                            </div>
-                                                            <div class="modal-footer">
-                                                                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
-                                                                <button type="submit" class="btn btn-primary">Guardar Cambios</button>
-                                                            </div>
-                                                        </form>
-                                                    </div>
-                                                </div>
-                                            </div>
-
-                                            <!-- Modal Ver Historial de la Cuenta -->
-                                            <div class="modal fade" id="historyAccountModal{{ acc.id }}" tabindex="-1" aria-hidden="true">
-                                                <div class="modal-dialog modal-lg">
-                                                    <div class="modal-content">
-                                                        <div class="modal-header bg-light">
-                                                            <h5 class="modal-title fw-bold"><i class="bi bi-clock-history me-2 text-primary"></i>Historial de Saldos: {{ acc.name }}</h5>
-                                                            <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-                                                        </div>
-                                                        <div class="modal-body p-0">
-                                                            <div class="table-responsive">
-                                                                <table class="table table-striped table-hover mb-0 align-middle">
-                                                                    <thead class="table-light">
-                                                                        <tr>
-                                                                            <th>Fecha</th>
-                                                                            <th class="text-end">Saldo Registrado</th>
-                                                                            <th>Nota / Detalle</th>
-                                                                            <th class="text-end">Acción</th>
-                                                                        </tr>
-                                                                    </thead>
-                                                                    <tbody>
-                                                                        {% if acc.balance_history %}
-                                                                            {% for h in acc.balance_history %}
-                                                                                <tr>
-                                                                                    <td><span class="badge bg-light text-dark border">{{ h.recorded_at }}</span></td>
-                                                                                    <td class="text-end fw-bold text-success">{{ h.balance | format_currency }}</td>
-                                                                                    <td class="text-muted small">{{ h.note or '-' }}</td>
-                                                                                    <td class="text-end">
-                                                                                        <form action="{{ url_for('delete_account_history_record', history_id=h.id) }}" method="POST" class="d-inline" onsubmit="return confirm('¿Eliminar este registro histórico?');">
-                                                                                            <button type="submit" class="btn btn-sm btn-outline-danger py-0 px-2" title="Eliminar registro">
-                                                                                                <i class="bi bi-x-lg"></i>
-                                                                                            </button>
-                                                                                        </form>
-                                                                                    </td>
-                                                                                </tr>
-                                                                            {% endfor %}
-                                                                        {% else %}
-                                                                            <tr>
-                                                                                <td colspan="4" class="text-center py-3 text-muted">No hay registros históricos para esta cuenta.</td>
-                                                                            </tr>
-                                                                        {% endif %}
-                                                                    </tbody>
-                                                                </table>
-                                                            </div>
-                                                        </div>
-                                                        <div class="modal-footer">
-                                                            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cerrar</button>
-                                                        </div>
-                                                    </div>
-                                                </div>
-                                            </div>
-                                        {% endfor %}
-                                    {% else %}
-                                        <tr>
-                                            <td colspan="5" class="text-center py-4 text-muted">
-                                                No hay cuentas registradas. Agrega tu primera cuenta a la izquierda.
-                                            </td>
-                                        </tr>
-                                    {% endif %}
-                                </tbody>
-                            </table>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
-    </div>
-
-    <!-- PANEL DE TARJETAS DE CRÉDITO -->
-    <div class="tab-pane fade" id="cards-pane" role="tabpanel">
-        <div class="row g-4">
-            <!-- Formulario Crear Tarjeta -->
-            <div class="col-lg-4">
-                <div class="card shadow-sm">
-                    <div class="card-header bg-white">
-                        <span class="fw-bold"><i class="bi bi-plus-circle me-2 text-primary"></i>Nueva Tarjeta de Crédito</span>
-                    </div>
-                    <div class="card-body">
-                        <form id="form-create-card" action="{{ url_for('add_card') }}" method="POST">
-                            <div class="mb-3">
-                                <label for="card_name" class="form-label fw-semibold">Nombre de la Tarjeta *</label>
-                                <input type="text" class="form-control" id="card_name" name="name" placeholder="Ej: Visa Signature Bancolombia" required>
-                            </div>
-                            <div class="mb-3">
-                                <label for="card_limit" class="form-label fw-semibold">Cupo Total</label>
-                                <input type="text" class="form-control currency-input" id="card_limit" name="credit_limit" value="$ 0,00">
-                            </div>
-                            <div class="mb-3">
-                                <label for="card_debt" class="form-label fw-semibold">Deuda Actual Total</label>
-                                <input type="text" class="form-control currency-input text-danger" id="card_debt" name="current_debt" value="$ 0,00">
-                            </div>
-                            <div class="mb-3">
-                                <label for="card_next_payment" class="form-label fw-semibold">Monto Próximo Pago</label>
-                                <input type="text" class="form-control currency-input text-warning-emphasis" id="card_next_payment" name="next_payment_amount" value="$ 0,00">
-                                <div class="form-text">Monto facturado para pagar en la fecha más próxima.</div>
-                            </div>
-                            <div class="row g-2 mb-3">
-                                <div class="col-6">
-                                    <label for="card_statement_day" class="form-label fw-semibold">Día Corte (1-31)</label>
-                                    <input type="number" class="form-control" id="card_statement_day" name="statement_day" min="1" max="31" value="15" data-default-val="15" required>
-                                </div>
-                                <div class="col-6">
-                                    <label for="card_due_day" class="form-label fw-semibold">Día Pago (1-31)</label>
-                                    <input type="number" class="form-control" id="card_due_day" name="due_day" min="1" max="31" value="5" data-default-val="5" required>
-                                </div>
-                            </div>
-                            <div class="mb-3">
-                                <label for="card_date" class="form-label fw-semibold">Fecha de Registro *</label>
-                                <input type="date" class="form-control" id="card_date" name="recorded_at" value="{{ today }}" required>
-                            </div>
-                            <div class="mb-3">
-                                <label for="card_note" class="form-label fw-semibold">Nota u Observación</label>
-                                <input type="text" class="form-control" id="card_note" name="note" placeholder="Ej: Registro inicial tarjeta">
-                            </div>
-                            <div class="d-grid">
-                                <button type="submit" class="btn btn-primary fw-semibold">
-                                    <i class="bi bi-save me-1"></i> Guardar Tarjeta
-                                </button>
-                            </div>
-                        </form>
-                    </div>
-                </div>
-            </div>
-
-            <!-- Listado de Tarjetas -->
-            <div class="col-lg-8">
-                <div class="card shadow-sm">
-                    <div class="card-header bg-white d-flex justify-content-between align-items-center">
-                        <span class="fw-bold"><i class="bi bi-credit-card-2-back me-2"></i>Tarjetas de Crédito Registradas</span>
-                        <span class="badge bg-primary-subtle text-primary">{{ cards|length }} Tarjetas</span>
-                    </div>
-                    <div class="card-body p-0">
-                        <div class="table-responsive">
-                            <table class="table table-hover align-middle mb-0">
-                                <thead class="table-light">
-                                    <tr>
-                                        <th>Tarjeta</th>
-                                        <th class="text-end">Cupo</th>
-                                        <th class="text-end">Deuda Actual</th>
-                                        <th class="text-end">Próx. Pago</th>
-                                        <th class="text-center">Corte / Pago</th>
-                                        <th class="text-center">Historial</th>
-                                        <th class="text-end">Acciones</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    {% if cards %}
-                                        {% for c in cards %}
-                                            <tr>
-                                                <td class="fw-bold">{{ c.name }}</td>
-                                                <td class="text-end text-muted">{{ c.credit_limit | format_currency }}</td>
-                                                <td class="text-end fw-bold text-danger">{{ c.current_debt | format_currency }}</td>
-                                                <td class="text-end fw-bold text-warning-emphasis">{{ c.next_payment_amount | format_currency }}</td>
-                                                <td class="text-center">
-                                                    <span class="badge bg-secondary-subtle text-secondary-emphasis">Día {{ c.statement_day }}</span> / 
-                                                    <span class="badge bg-primary-subtle text-primary">Día {{ c.due_day }}</span>
-                                                </td>
-                                                <td class="text-center">
-                                                    <button class="btn btn-sm btn-outline-info" data-bs-toggle="modal" data-bs-target="#historyCardModal{{ c.id }}" title="Ver historial de deuda">
-                                                        <i class="bi bi-clock-history me-1"></i>{{ c.debt_history|length }}
-                                                    </button>
-                                                </td>
-                                                <td class="text-end">
-                                                    <!-- Botón Registrar Nueva Deuda -->
-                                                    <button class="btn btn-sm btn-warning text-dark me-1" data-bs-toggle="modal" data-bs-target="#newDebtModal{{ c.id }}" title="Actualizar Deuda con Fecha">
-                                                        <i class="bi bi-plus-lg"></i> Deuda
-                                                    </button>
-                                                    <!-- Botón Editar -->
-                                                    <button class="btn btn-sm btn-outline-primary me-1" data-bs-toggle="modal" data-bs-target="#editCardModal{{ c.id }}" title="Editar Tarjeta">
-                                                        <i class="bi bi-pencil"></i>
-                                                    </button>
-                                                    <!-- Botón Eliminar -->
-                                                    <form action="{{ url_for('delete_card', id=c.id) }}" method="POST" class="d-inline" onsubmit="return confirm('¿Seguro que deseas eliminar esta tarjeta y su historial?');">
-                                                        <button type="submit" class="btn btn-sm btn-outline-danger" title="Eliminar">
-                                                            <i class="bi bi-trash"></i>
-                                                        </button>
-                                                    </form>
-                                                </td>
-                                            </tr>
-
-                                            <!-- Modal Registrar Nueva Deuda con Fecha -->
-                                            <div class="modal fade" id="newDebtModal{{ c.id }}" tabindex="-1" aria-hidden="true">
-                                                <div class="modal-dialog">
-                                                    <div class="modal-content">
-                                                        <form action="{{ url_for('add_card_history_record', id=c.id) }}" method="POST">
-                                                            <div class="modal-header bg-warning text-dark">
-                                                                <h5 class="modal-title fw-bold"><i class="bi bi-calendar-check me-2"></i>Actualizar Deuda: {{ c.name }}</h5>
-                                                                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-                                                            </div>
-                                                            <div class="modal-body">
-                                                                <p class="text-muted small mb-3">Registra el estado de la deuda y próximo pago en una fecha específica para la curva histórica.</p>
-                                                                <div class="mb-3">
-                                                                    <label class="form-label fw-semibold">Nueva Deuda Total *</label>
-                                                                    <input type="text" class="form-control currency-input text-danger fs-5" name="current_debt" value="{{ c.current_debt }}" required>
-                                                                </div>
-                                                                <div class="mb-3">
-                                                                    <label class="form-label fw-semibold">Monto Próximo Pago</label>
-                                                                    <input type="text" class="form-control currency-input text-warning-emphasis" name="next_payment_amount" value="{{ c.next_payment_amount }}">
-                                                                </div>
-                                                                <div class="mb-3">
-                                                                    <label class="form-label fw-semibold">Fecha del Registro *</label>
-                                                                    <input type="date" class="form-control" name="recorded_at" value="{{ today }}" required>
-                                                                </div>
-                                                                <div class="mb-3">
-                                                                    <label class="form-label fw-semibold">Nota / Motivo</label>
-                                                                    <input type="text" class="form-control" name="note" placeholder="Ej: Extracto mes actual, Pago parcial realizado...">
-                                                                </div>
-                                                            </div>
-                                                            <div class="modal-footer">
-                                                                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
-                                                                <button type="submit" class="btn btn-warning text-dark fw-semibold"><i class="bi bi-save me-1"></i>Guardar en Historial</button>
-                                                            </div>
-                                                        </form>
-                                                    </div>
-                                                </div>
-                                            </div>
-
-                                            <!-- Modal Editar Tarjeta -->
-                                            <div class="modal fade" id="editCardModal{{ c.id }}" tabindex="-1" aria-hidden="true">
-                                                <div class="modal-dialog">
-                                                    <div class="modal-content">
-                                                        <form action="{{ url_for('edit_card', id=c.id) }}" method="POST">
-                                                            <div class="modal-header">
-                                                                <h5 class="modal-title fw-bold">Editar Tarjeta: {{ c.name }}</h5>
-                                                                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-                                                            </div>
-                                                            <div class="modal-body">
-                                                                <div class="mb-3">
-                                                                    <label class="form-label fw-semibold">Nombre</label>
-                                                                    <input type="text" class="form-control" name="name" value="{{ c.name }}" required>
-                                                                </div>
-                                                                <div class="mb-3">
-                                                                    <label class="form-label fw-semibold">Cupo Total</label>
-                                                                    <input type="text" class="form-control currency-input" name="credit_limit" value="{{ c.credit_limit }}">
-                                                                </div>
-                                                                <div class="mb-3">
-                                                                    <label class="form-label fw-semibold">Deuda Actual</label>
-                                                                    <input type="text" class="form-control currency-input text-danger" name="current_debt" value="{{ c.current_debt }}">
-                                                                </div>
-                                                                <div class="mb-3">
-                                                                    <label class="form-label fw-semibold">Monto Próximo Pago</label>
-                                                                    <input type="text" class="form-control currency-input text-warning-emphasis" name="next_payment_amount" value="{{ c.next_payment_amount }}">
-                                                                </div>
-                                                                <div class="row g-2 mb-3">
-                                                                    <div class="col-6">
-                                                                        <label class="form-label fw-semibold">Día Corte (1-31)</label>
-                                                                        <input type="number" class="form-control" name="statement_day" min="1" max="31" value="{{ c.statement_day }}" required>
-                                                                    </div>
-                                                                    <div class="col-6">
-                                                                        <label class="form-label fw-semibold">Día Pago (1-31)</label>
-                                                                        <input type="number" class="form-control" name="due_day" min="1" max="31" value="{{ c.due_day }}" required>
-                                                                    </div>
-                                                                </div>
-                                                                <div class="mb-3">
-                                                                    <label class="form-label fw-semibold">Fecha de Actualización</label>
-                                                                    <input type="date" class="form-control" name="recorded_at" value="{{ today }}" required>
-                                                                </div>
-                                                                <div class="mb-3">
-                                                                    <label class="form-label fw-semibold">Nota</label>
-                                                                    <input type="text" class="form-control" name="note" value="Actualización">
-                                                                </div>
-                                                            </div>
-                                                            <div class="modal-footer">
-                                                                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
-                                                                <button type="submit" class="btn btn-primary">Guardar Cambios</button>
-                                                            </div>
-                                                        </form>
-                                                    </div>
-                                                </div>
-                                            </div>
-
-                                            <!-- Modal Ver Historial de la Tarjeta -->
-                                            <div class="modal fade" id="historyCardModal{{ c.id }}" tabindex="-1" aria-hidden="true">
-                                                <div class="modal-dialog modal-lg">
-                                                    <div class="modal-content">
-                                                        <div class="modal-header bg-light">
-                                                            <h5 class="modal-title fw-bold"><i class="bi bi-clock-history me-2 text-warning-emphasis"></i>Historial de Deuda: {{ c.name }}</h5>
-                                                            <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-                                                        </div>
-                                                        <div class="modal-body p-0">
-                                                            <div class="table-responsive">
-                                                                <table class="table table-striped table-hover mb-0 align-middle">
-                                                                    <thead class="table-light">
-                                                                        <tr>
-                                                                            <th>Fecha</th>
-                                                                            <th class="text-end">Deuda Registrada</th>
-                                                                            <th class="text-end">Próximo Pago</th>
-                                                                            <th>Nota / Detalle</th>
-                                                                            <th class="text-end">Acción</th>
-                                                                        </tr>
-                                                                    </thead>
-                                                                    <tbody>
-                                                                        {% if c.debt_history %}
-                                                                            {% for h in c.debt_history %}
-                                                                                <tr>
-                                                                                    <td><span class="badge bg-light text-dark border">{{ h.recorded_at }}</span></td>
-                                                                                    <td class="text-end fw-bold text-danger">{{ h.current_debt | format_currency }}</td>
-                                                                                    <td class="text-end text-warning-emphasis fw-semibold">
-                                                                                        {% if h.next_payment_amount %}{{ h.next_payment_amount | format_currency }}{% else %}-{% endif %}
-                                                                                    </td>
-                                                                                    <td class="text-muted small">{{ h.note or '-' }}</td>
-                                                                                    <td class="text-end">
-                                                                                        <form action="{{ url_for('delete_card_history_record', history_id=h.id) }}" method="POST" class="d-inline" onsubmit="return confirm('¿Eliminar este registro histórico?');">
-                                                                                            <button type="submit" class="btn btn-sm btn-outline-danger py-0 px-2" title="Eliminar registro">
-                                                                                                <i class="bi bi-x-lg"></i>
-                                                                                            </button>
-                                                                                        </form>
-                                                                                    </td>
-                                                                                </tr>
-                                                                            {% endfor %}
-                                                                        {% else %}
-                                                                            <tr>
-                                                                                <td colspan="5" class="text-center py-3 text-muted">No hay registros históricos para esta tarjeta.</td>
-                                                                            </tr>
-                                                                        {% endif %}
-                                                                    </tbody>
-                                                                </table>
-                                                            </div>
-                                                        </div>
-                                                        <div class="modal-footer">
-                                                            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cerrar</button>
-                                                        </div>
-                                                    </div>
-                                                </div>
-                                            </div>
-                                        {% endfor %}
-                                    {% else %}
-                                        <tr>
-                                            <td colspan="7" class="text-center py-4 text-muted">
-                                                No hay tarjetas registradas. Agrega tu primera tarjeta a la izquierda.
-                                            </td>
-                                        </tr>
-                                    {% endif %}
-                                </tbody>
-                            </table>
-                        </div>
-                    </div>
+                                {% endfor %}
+                            {% else %}
+                                <tr>
+                                    <td colspan="5" class="text-center py-5 text-muted">
+                                        <i class="bi bi-bank fs-1 d-block mb-2 text-secondary"></i>
+                                        <p class="mb-2 fw-semibold">No tienes cuentas bancarias registradas.</p>
+                                        <button class="btn btn-primary btn-sm" data-bs-toggle="modal" data-bs-target="#createAccountModal">
+                                            <i class="bi bi-plus-lg me-1"></i> Registrar tu primera cuenta
+                                        </button>
+                                    </td>
+                                </tr>
+                            {% endif %}
+                        </tbody>
+                    </table>
                 </div>
             </div>
         </div>
     </div>
 </div>
+
+
+<!-- ═══════════════════════════════════════════════════════════════════════ -->
+<!-- BLOQUE 2: TABLA DE TARJETAS DE CRÉDITO (DEBAJO DE CUENTAS)            -->
+<!-- ═══════════════════════════════════════════════════════════════════════ -->
+<div class="row">
+    <div class="col-12">
+        <div class="card shadow-sm border-0">
+            <div class="card-header bg-white py-3 d-flex justify-content-between align-items-center flex-wrap gap-2 border-bottom">
+                <div class="d-flex align-items-center gap-2">
+                    <div class="bg-warning-subtle text-warning-emphasis p-2 rounded-circle">
+                        <i class="bi bi-credit-card fs-5"></i>
+                    </div>
+                    <div>
+                        <h5 class="fw-bold mb-0">Tarjetas de Crédito</h5>
+                        <small class="text-muted">Cupos, deudas actuales facturadas y fechas de corte y pago</small>
+                    </div>
+                </div>
+                <div class="d-flex align-items-center gap-2">
+                    <span class="badge bg-warning-subtle text-warning-emphasis fs-6 px-3 py-2 border border-warning">
+                        Total: {{ cards|length }} Tarjetas
+                    </span>
+                    <button class="btn btn-sm btn-outline-warning text-dark fw-semibold" data-bs-toggle="modal" data-bs-target="#createCardModal">
+                        <i class="bi bi-plus-lg me-1"></i> Agregar Tarjeta
+                    </button>
+                </div>
+            </div>
+
+            <div class="card-body p-0">
+                <div class="table-responsive">
+                    <table class="table table-hover align-middle mb-0">
+                        <thead class="table-light">
+                            <tr>
+                                <th class="ps-4">Tarjeta</th>
+                                <th class="text-end">Cupo Total</th>
+                                <th class="text-end">Deuda Actual Total</th>
+                                <th class="text-end">Monto Próx. Pago</th>
+                                <th class="text-center">Ciclo (Corte / Pago)</th>
+                                <th class="text-center">Historial</th>
+                                <th class="text-end pe-4">Acciones</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% if cards %}
+                                {% for c in cards %}
+                                    <tr>
+                                        <td class="ps-4">
+                                            <div class="fw-bold text-dark fs-6">{{ c.name }}</div>
+                                            <small class="text-muted">ID: #{{ c.id }}</small>
+                                        </td>
+                                        <td class="text-end text-muted font-monospace">
+                                            {{ c.credit_limit | format_currency }}
+                                        </td>
+                                        <td class="text-end fw-bold text-danger fs-6 font-monospace">
+                                            {{ c.current_debt | format_currency }}
+                                        </td>
+                                        <td class="text-end fw-bold text-warning-emphasis font-monospace">
+                                            {{ c.next_payment_amount | format_currency }}
+                                        </td>
+                                        <td class="text-center">
+                                            <span class="badge bg-secondary-subtle text-secondary-emphasis border me-1">
+                                                Corte: Día {{ c.statement_day }}
+                                            </span>
+                                            <span class="badge bg-primary-subtle text-primary border">
+                                                Pago: Día {{ c.due_day }}
+                                            </span>
+                                        </td>
+                                        <td class="text-center">
+                                            <button class="btn btn-sm btn-outline-info" data-bs-toggle="modal" data-bs-target="#historyCardModal{{ c.id }}" title="Ver historial de deuda">
+                                                <i class="bi bi-clock-history me-1"></i>{{ c.debt_history|length }} registros
+                                            </button>
+                                        </td>
+                                        <td class="text-end pe-4">
+                                            <!-- Botón Actualizar Deuda con Fecha -->
+                                            <button class="btn btn-sm btn-warning text-dark me-1 fw-semibold" data-bs-toggle="modal" data-bs-target="#newDebtModal{{ c.id }}" title="Actualizar Deuda con Fecha">
+                                                <i class="bi bi-plus-circle me-1"></i> Actualizar Deuda
+                                            </button>
+                                            <!-- Botón Editar -->
+                                            <button class="btn btn-sm btn-outline-secondary me-1" data-bs-toggle="modal" data-bs-target="#editCardModal{{ c.id }}" title="Editar Parámetros">
+                                                <i class="bi bi-pencil"></i>
+                                            </button>
+                                            <!-- Botón Eliminar -->
+                                            <form action="{{ url_for('delete_card', id=c.id) }}" method="POST" class="d-inline" onsubmit="return confirm('¿Seguro que deseas eliminar esta tarjeta y todo su historial?');">
+                                                <button type="submit" class="btn btn-sm btn-outline-danger" title="Eliminar Tarjeta">
+                                                    <i class="bi bi-trash"></i>
+                                                </button>
+                                            </form>
+                                        </td>
+                                    </tr>
+                                {% endfor %}
+                            {% else %}
+                                <tr>
+                                    <td colspan="7" class="text-center py-5 text-muted">
+                                        <i class="bi bi-credit-card fs-1 d-block mb-2 text-secondary"></i>
+                                        <p class="mb-2 fw-semibold">No tienes tarjetas de crédito registradas.</p>
+                                        <button class="btn btn-warning text-dark btn-sm fw-semibold" data-bs-toggle="modal" data-bs-target="#createCardModal">
+                                            <i class="bi bi-plus-lg me-1"></i> Registrar tu primera tarjeta
+                                        </button>
+                                    </td>
+                                </tr>
+                            {% endif %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+
+<!-- ═══════════════════════════════════════════════════════════════════════ -->
+<!-- MODALES: CREACIÓN DE PRODUCTOS                                         -->
+<!-- ═══════════════════════════════════════════════════════════════════════ -->
+
+<!-- Modal Crear Nueva Cuenta -->
+<div class="modal fade" id="createAccountModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <form id="form-create-account" action="{{ url_for('add_account') }}" method="POST">
+                <div class="modal-header bg-primary text-white">
+                    <h5 class="modal-title fw-bold"><i class="bi bi-bank me-2"></i>Nueva Cuenta de Ahorro / Corriente</h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label for="acc_name" class="form-label fw-semibold">Nombre de la Cuenta *</label>
+                        <input type="text" class="form-control" id="acc_name" name="name" placeholder="Ej: Cuenta Ahorros Bancolombia" required>
+                    </div>
+                    <div class="mb-3">
+                        <label for="acc_balance" class="form-label fw-semibold">Saldo Inicial *</label>
+                        <input type="text" class="form-control currency-input fs-5" id="acc_balance" name="balance" value="$ 0,00" required>
+                        <div class="form-text">Monto en formato $ XXX XXX XXX,XX</div>
+                    </div>
+                    <div class="mb-3">
+                        <label for="acc_date" class="form-label fw-semibold">Fecha de Saldo *</label>
+                        <input type="date" class="form-control" id="acc_date" name="recorded_at" value="{{ today }}" required>
+                    </div>
+                    <div class="mb-3">
+                        <label for="acc_note" class="form-label fw-semibold">Nota u Observación</label>
+                        <input type="text" class="form-control" id="acc_note" name="note" placeholder="Ej: Saldo inicial apertura">
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                    <button type="submit" class="btn btn-primary fw-semibold"><i class="bi bi-save me-1"></i> Guardar Cuenta</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- Modal Crear Nueva Tarjeta -->
+<div class="modal fade" id="createCardModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <form id="form-create-card" action="{{ url_for('add_card') }}" method="POST">
+                <div class="modal-header bg-warning text-dark">
+                    <h5 class="modal-title fw-bold"><i class="bi bi-credit-card me-2"></i>Nueva Tarjeta de Crédito</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label for="card_name" class="form-label fw-semibold">Nombre de la Tarjeta *</label>
+                        <input type="text" class="form-control" id="card_name" name="name" placeholder="Ej: Visa Signature Bancolombia" required>
+                    </div>
+                    <div class="mb-3">
+                        <label for="card_limit" class="form-label fw-semibold">Cupo Total</label>
+                        <input type="text" class="form-control currency-input" id="card_limit" name="credit_limit" value="$ 0,00">
+                    </div>
+                    <div class="mb-3">
+                        <label for="card_debt" class="form-label fw-semibold">Deuda Actual Total</label>
+                        <input type="text" class="form-control currency-input text-danger" id="card_debt" name="current_debt" value="$ 0,00">
+                    </div>
+                    <div class="mb-3">
+                        <label for="card_next_payment" class="form-label fw-semibold">Monto Próximo Pago</label>
+                        <input type="text" class="form-control currency-input text-warning-emphasis" id="card_next_payment" name="next_payment_amount" value="$ 0,00">
+                        <div class="form-text">Monto facturado para pagar en la fecha más próxima.</div>
+                    </div>
+                    <div class="row g-2 mb-3">
+                        <div class="col-6">
+                            <label for="card_statement_day" class="form-label fw-semibold">Día Corte (1-31)</label>
+                            <input type="number" class="form-control" id="card_statement_day" name="statement_day" min="1" max="31" value="15" data-default-val="15" required>
+                        </div>
+                        <div class="col-6">
+                            <label for="card_due_day" class="form-label fw-semibold">Día Pago (1-31)</label>
+                            <input type="number" class="form-control" id="card_due_day" name="due_day" min="1" max="31" value="5" data-default-val="5" required>
+                        </div>
+                    </div>
+                    <div class="mb-3">
+                        <label for="card_date" class="form-label fw-semibold">Fecha de Registro *</label>
+                        <input type="date" class="form-control" id="card_date" name="recorded_at" value="{{ today }}" required>
+                    </div>
+                    <div class="mb-3">
+                        <label for="card_note" class="form-label fw-semibold">Nota u Observación</label>
+                        <input type="text" class="form-control" id="card_note" name="note" placeholder="Ej: Registro inicial tarjeta">
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                    <button type="submit" class="btn btn-warning text-dark fw-semibold"><i class="bi bi-save me-1"></i> Guardar Tarjeta</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+
+<!-- ═══════════════════════════════════════════════════════════════════════ -->
+<!-- MODALES INDIVIDUALES POR CUENTA (Actualizar Saldo, Editar, Historial)   -->
+<!-- ═══════════════════════════════════════════════════════════════════════ -->
+{% for acc in accounts %}
+    <!-- Modal Registrar Nuevo Saldo con Fecha -->
+    <div class="modal fade" id="newBalanceModal{{ acc.id }}" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <form action="{{ url_for('add_account_history_record', id=acc.id) }}" method="POST">
+                    <div class="modal-header bg-success text-white">
+                        <h5 class="modal-title fw-bold"><i class="bi bi-calendar-check me-2"></i>Actualizar Saldo: {{ acc.name }}</h5>
+                        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                    </div>
+                    <div class="modal-body">
+                        <p class="text-muted small mb-3">Registra el saldo real en una fecha específica para mantener la curva histórica día a día.</p>
+                        <div class="mb-3">
+                            <label class="form-label fw-semibold">Nuevo Saldo Real *</label>
+                            <input type="text" class="form-control currency-input fs-5" name="balance" value="{{ acc.balance }}" required>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label fw-semibold">Fecha del Saldo *</label>
+                            <input type="date" class="form-control" name="recorded_at" value="{{ today }}" required>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label fw-semibold">Nota / Motivo</label>
+                            <input type="text" class="form-control" name="note" placeholder="Ej: Balance fin de mes, Pago de nómina...">
+                        </div>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                        <button type="submit" class="btn btn-success fw-semibold"><i class="bi bi-save me-1"></i>Guardar en Historial</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal Editar Cuenta -->
+    <div class="modal fade" id="editAccountModal{{ acc.id }}" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <form action="{{ url_for('edit_account', id=acc.id) }}" method="POST">
+                    <div class="modal-header bg-light">
+                        <h5 class="modal-title fw-bold">Editar Cuenta: {{ acc.name }}</h5>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                    </div>
+                    <div class="modal-body">
+                        <div class="mb-3">
+                            <label class="form-label fw-semibold">Nombre</label>
+                            <input type="text" class="form-control" name="name" value="{{ acc.name }}" required>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label fw-semibold">Saldo</label>
+                            <input type="text" class="form-control currency-input fs-5" name="balance" value="{{ acc.balance }}">
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label fw-semibold">Fecha de Actualización</label>
+                            <input type="date" class="form-control" name="recorded_at" value="{{ today }}" required>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label fw-semibold">Nota</label>
+                            <input type="text" class="form-control" name="note" value="Actualización">
+                        </div>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                        <button type="submit" class="btn btn-primary fw-semibold">Guardar Cambios</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal Ver Historial de la Cuenta -->
+    <div class="modal fade" id="historyAccountModal{{ acc.id }}" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header bg-light">
+                    <h5 class="modal-title fw-bold"><i class="bi bi-clock-history me-2 text-primary"></i>Historial de Saldos: {{ acc.name }}</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body p-0">
+                    <div class="table-responsive">
+                        <table class="table table-striped table-hover mb-0 align-middle">
+                            <thead class="table-light">
+                                <tr>
+                                    <th>Fecha</th>
+                                    <th class="text-end">Saldo Registrado</th>
+                                    <th>Nota / Detalle</th>
+                                    <th class="text-end pe-3">Acción</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% if acc.balance_history %}
+                                    {% for h in acc.balance_history %}
+                                        <tr>
+                                            <td><span class="badge bg-light text-dark border">{{ h.recorded_at }}</span></td>
+                                            <td class="text-end fw-bold text-success">{{ h.balance | format_currency }}</td>
+                                            <td class="text-muted small">{{ h.note or '-' }}</td>
+                                            <td class="text-end pe-3">
+                                                <form action="{{ url_for('delete_account_history_record', history_id=h.id) }}" method="POST" class="d-inline" onsubmit="return confirm('¿Eliminar este registro histórico?');">
+                                                    <button type="submit" class="btn btn-sm btn-outline-danger py-0 px-2" title="Eliminar registro">
+                                                        <i class="bi bi-x-lg"></i>
+                                                    </button>
+                                                </form>
+                                            </td>
+                                        </tr>
+                                    {% endfor %}
+                                {% else %}
+                                    <tr>
+                                        <td colspan="4" class="text-center py-4 text-muted">No hay registros históricos para esta cuenta.</td>
+                                    </tr>
+                                {% endif %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cerrar</button>
+                </div>
+            </div>
+        </div>
+    </div>
+{% endfor %}
+
+
+<!-- ═══════════════════════════════════════════════════════════════════════ -->
+<!-- MODALES INDIVIDUALES POR TARJETA (Actualizar Deuda, Editar, Historial)  -->
+<!-- ═══════════════════════════════════════════════════════════════════════ -->
+{% for c in cards %}
+    <!-- Modal Registrar Nueva Deuda con Fecha -->
+    <div class="modal fade" id="newDebtModal{{ c.id }}" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <form action="{{ url_for('add_card_history_record', id=c.id) }}" method="POST">
+                    <div class="modal-header bg-warning text-dark">
+                        <h5 class="modal-title fw-bold"><i class="bi bi-calendar-check me-2"></i>Actualizar Deuda: {{ c.name }}</h5>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                    </div>
+                    <div class="modal-body">
+                        <p class="text-muted small mb-3">Registra el estado de la deuda y próximo pago en una fecha específica para la curva histórica.</p>
+                        <div class="mb-3">
+                            <label class="form-label fw-semibold">Nueva Deuda Total *</label>
+                            <input type="text" class="form-control currency-input text-danger fs-5" name="current_debt" value="{{ c.current_debt }}" required>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label fw-semibold">Monto Próximo Pago</label>
+                            <input type="text" class="form-control currency-input text-warning-emphasis" name="next_payment_amount" value="{{ c.next_payment_amount }}">
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label fw-semibold">Fecha del Registro *</label>
+                            <input type="date" class="form-control" name="recorded_at" value="{{ today }}" required>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label fw-semibold">Nota / Motivo</label>
+                            <input type="text" class="form-control" name="note" placeholder="Ej: Extracto mes actual, Pago parcial realizado...">
+                        </div>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                        <button type="submit" class="btn btn-warning text-dark fw-semibold"><i class="bi bi-save me-1"></i>Guardar en Historial</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal Editar Tarjeta -->
+    <div class="modal fade" id="editCardModal{{ c.id }}" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <form action="{{ url_for('edit_card', id=c.id) }}" method="POST">
+                    <div class="modal-header bg-light">
+                        <h5 class="modal-title fw-bold">Editar Tarjeta: {{ c.name }}</h5>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                    </div>
+                    <div class="modal-body">
+                        <div class="mb-3">
+                            <label class="form-label fw-semibold">Nombre</label>
+                            <input type="text" class="form-control" name="name" value="{{ c.name }}" required>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label fw-semibold">Cupo Total</label>
+                            <input type="text" class="form-control currency-input" name="credit_limit" value="{{ c.credit_limit }}">
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label fw-semibold">Deuda Actual</label>
+                            <input type="text" class="form-control currency-input text-danger" name="current_debt" value="{{ c.current_debt }}">
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label fw-semibold">Monto Próximo Pago</label>
+                            <input type="text" class="form-control currency-input text-warning-emphasis" name="next_payment_amount" value="{{ c.next_payment_amount }}">
+                        </div>
+                        <div class="row g-2 mb-3">
+                            <div class="col-6">
+                                <label class="form-label fw-semibold">Día Corte (1-31)</label>
+                                <input type="number" class="form-control" name="statement_day" min="1" max="31" value="{{ c.statement_day }}" required>
+                            </div>
+                            <div class="col-6">
+                                <label class="form-label fw-semibold">Día Pago (1-31)</label>
+                                <input type="number" class="form-control" name="due_day" min="1" max="31" value="{{ c.due_day }}" required>
+                            </div>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label fw-semibold">Fecha de Actualización</label>
+                            <input type="date" class="form-control" name="recorded_at" value="{{ today }}" required>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label fw-semibold">Nota</label>
+                            <input type="text" class="form-control" name="note" value="Actualización">
+                        </div>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                        <button type="submit" class="btn btn-primary fw-semibold">Guardar Cambios</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal Ver Historial de la Tarjeta -->
+    <div class="modal fade" id="historyCardModal{{ c.id }}" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header bg-light">
+                    <h5 class="modal-title fw-bold"><i class="bi bi-clock-history me-2 text-warning-emphasis"></i>Historial de Deuda: {{ c.name }}</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body p-0">
+                    <div class="table-responsive">
+                        <table class="table table-striped table-hover mb-0 align-middle">
+                            <thead class="table-light">
+                                <tr>
+                                    <th>Fecha</th>
+                                    <th class="text-end">Deuda Registrada</th>
+                                    <th class="text-end">Próximo Pago</th>
+                                    <th>Nota / Detalle</th>
+                                    <th class="text-end pe-3">Acción</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% if c.debt_history %}
+                                    {% for h in c.debt_history %}
+                                        <tr>
+                                            <td><span class="badge bg-light text-dark border">{{ h.recorded_at }}</span></td>
+                                            <td class="text-end fw-bold text-danger">{{ h.current_debt | format_currency }}</td>
+                                            <td class="text-end text-warning-emphasis fw-semibold">
+                                                {% if h.next_payment_amount %}{{ h.next_payment_amount | format_currency }}{% else %}-{% endif %}
+                                            </td>
+                                            <td class="text-muted small">{{ h.note or '-' }}</td>
+                                            <td class="text-end pe-3">
+                                                <form action="{{ url_for('delete_card_history_record', history_id=h.id) }}" method="POST" class="d-inline" onsubmit="return confirm('¿Eliminar este registro histórico?');">
+                                                    <button type="submit" class="btn btn-sm btn-outline-danger py-0 px-2" title="Eliminar registro">
+                                                        <i class="bi bi-x-lg"></i>
+                                                    </button>
+                                                </form>
+                                            </td>
+                                        </tr>
+                                    {% endfor %}
+                                {% else %}
+                                    <tr>
+                                        <td colspan="5" class="text-center py-4 text-muted">No hay registros históricos para esta tarjeta.</td>
+                                    </tr>
+                                {% endif %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cerrar</button>
+                </div>
+            </div>
+        </div>
+    </div>
+{% endfor %}
+
 {% endblock %}
