@@ -1,89 +1,215 @@
+{% from '_macros.html' import sheet %}
 <!DOCTYPE html>
 <html lang="es">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>{% block title %}Gestión Financiera & Cashflow{% endblock %}</title>
-    <!-- Bootstrap 5 CSS -->
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
-    <!-- Bootstrap Icons -->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <meta name="color-scheme" content="light dark">
+    <meta name="theme-color" content="#f5f5f7" media="(prefers-color-scheme: light)">
+    <meta name="theme-color" content="#000000" media="(prefers-color-scheme: dark)">
+    <title>{% block title %}Gestión Financiera{% endblock %}</title>
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
-    <!-- Plotly.js -->
     <script src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
-    <!-- Custom CSS -->
     <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
     {% block extra_head %}{% endblock %}
 </head>
 <body>
-    <nav class="navbar navbar-expand-lg navbar-dark bg-dark sticky-top shadow-sm">
-        <div class="container-fluid px-4">
-            <a class="navbar-brand d-flex align-items-center gap-2" href="{{ url_for('index') }}">
-                <i class="bi bi-wallet2 text-primary fs-4"></i>
-                <span>Gestión Financiera</span>
-            </a>
-            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
-                <span class="navbar-toggler-icon"></span>
+<div class="app">
+    {% set nav = [
+        ('dashboard', url_for('index'), 'bi-pie-chart', 'bi-pie-chart-fill', 'Resumen'),
+        ('products', url_for('products_view'), 'bi-wallet2', 'bi-wallet-fill', 'Cuentas y tarjetas'),
+        ('movements', url_for('movements_view'), 'bi-arrow-left-right', 'bi-arrow-left-right', 'Movimientos'),
+    ] %}
+
+    <!-- Barra lateral (escritorio) -->
+    <aside class="sidebar" aria-label="Navegación principal">
+        <a class="brand" href="{{ url_for('index') }}">
+            <span class="brand-mark"><i class="bi bi-wallet2"></i></span>
+            <span>Gestión Financiera<small>Flujo de caja</small></span>
+        </a>
+        <nav>
+            <ul class="nav-list">
+                {% for key, href, icon, icon_active, label in nav %}
+                <li>
+                    <a class="nav-link" href="{{ href }}" {% if active_page == key %}aria-current="page"{% endif %}>
+                        <i class="bi {{ icon_active if active_page == key else icon }}"></i>{{ label }}
+                    </a>
+                </li>
+                {% endfor %}
+            </ul>
+        </nav>
+        <div class="sidebar-cta">
+            <button type="button" class="btn btn-primary btn-block" data-sheet-open="sheet-new-movement">
+                <i class="bi bi-plus-lg"></i> Nuevo movimiento
             </button>
-            <div class="collapse navbar-collapse" id="navbarNav">
-                <ul class="navbar-nav me-auto mb-2 mb-lg-0 ms-lg-3">
-                    <li class="nav-item">
-                        <a class="nav-link {% if active_page == 'dashboard' %}active text-white fw-bold{% endif %}" href="{{ url_for('index') }}">
-                            <i class="bi bi-graph-up me-1"></i> Dashboard & Proyección
-                        </a>
-                    </li>
-                    <li class="nav-item">
-                        <a class="nav-link {% if active_page == 'products' %}active text-white fw-bold{% endif %}" href="{{ url_for('products_view') }}">
-                            <i class="bi bi-credit-card me-1"></i> Cuentas y Tarjetas
-                        </a>
-                    </li>
-                    <li class="nav-item">
-                        <a class="nav-link {% if active_page == 'movements' %}active text-white fw-bold{% endif %}" href="{{ url_for('movements_view') }}">
-                            <i class="bi bi-arrow-left-right me-1"></i> Movimientos
-                        </a>
-                    </li>
-                </ul>
-
-                <!-- Usuario autenticado + Cerrar sesión -->
-                {% if current_user.is_authenticated %}
-                <div class="d-flex align-items-center gap-2 ms-lg-3">
-                    <span class="navbar-text text-white-50 small d-none d-md-inline">
-                        <i class="bi bi-person-circle me-1"></i>{{ current_user.username }}
-                    </span>
-                    <form action="{{ url_for('logout') }}" method="GET" class="d-inline">
-                        <button type="submit" class="btn btn-outline-light btn-sm fw-semibold">
-                            <i class="bi bi-box-arrow-right me-1"></i>
-                            <span class="d-none d-sm-inline">Cerrar Sesión</span>
-                        </button>
-                    </form>
-                </div>
-                {% endif %}
-            </div>
         </div>
-    </nav>
-
-    <main class="container-fluid px-4 py-4">
-        <!-- Contenedor para mensajes Flash / Alertas -->
-        <div id="flash-messages">
-            {% with messages = get_flashed_messages(with_categories=true) %}
-                {% if messages %}
-                    {% for category, message in messages %}
-                        <div class="alert alert-{{ category if category != 'message' else 'info' }} alert-dismissible fade show shadow-sm" role="alert">
-                            {{ message }}
-                            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
-                        </div>
-                    {% endfor %}
-                {% endif %}
-            {% endwith %}
+        {% if current_user.is_authenticated %}
+        <div class="sidebar-footer">
+            <span class="avatar">{{ current_user.username[:1] }}</span>
+            <span class="who">{{ current_user.username }}</span>
+            <a class="icon-btn" href="{{ url_for('logout') }}" title="Cerrar sesión" aria-label="Cerrar sesión">
+                <i class="bi bi-box-arrow-right"></i>
+            </a>
         </div>
+        {% endif %}
+    </aside>
 
+    <!-- Barra superior (móvil) -->
+    <header class="topbar">
+        <a class="brand" href="{{ url_for('index') }}">
+            <span class="brand-mark"><i class="bi bi-wallet2"></i></span>
+            <span>Gestión Financiera</span>
+        </a>
+        <a class="icon-btn" href="{{ url_for('logout') }}" title="Cerrar sesión" aria-label="Cerrar sesión">
+            <i class="bi bi-box-arrow-right"></i>
+        </a>
+    </header>
+
+    <main class="main" id="main">
         {% block content %}{% endblock %}
     </main>
 
-    <!-- Bootstrap 5 JS Bundle -->
-    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
-    <!-- Custom JS -->
-    <script src="{{ url_for('static', filename='js/main.js') }}"></script>
-    {% block extra_scripts %}{% endblock %}
+    <!-- Pestañas inferiores (móvil) -->
+    <nav class="tabbar" aria-label="Navegación principal">
+        {% for key, href, icon, icon_active, label in nav %}
+            {% if loop.index == 3 %}
+            <button type="button" class="tab tab-add" data-sheet-open="sheet-new-movement" aria-label="Nuevo movimiento">
+                <span class="tab-add-icon"><i class="bi bi-plus-lg"></i></span>
+            </button>
+            {% endif %}
+            <a class="tab" href="{{ href }}" {% if active_page == key %}aria-current="page"{% endif %}>
+                <i class="bi {{ icon_active if active_page == key else icon }}"></i>
+                <span>{{ 'Cuentas' if key == 'products' else label }}</span>
+            </a>
+        {% endfor %}
+    </nav>
+</div>
+
+<!-- Notificaciones -->
+<div class="toasts" role="status" aria-live="polite">
+    {% with messages = get_flashed_messages(with_categories=true) %}
+        {% for category, message in messages %}
+            {% set cat = category if category in ['success', 'danger', 'warning', 'info'] else 'info' %}
+            {% set icon = {'success': 'bi-check-circle-fill', 'danger': 'bi-exclamation-octagon-fill', 'warning': 'bi-exclamation-triangle-fill', 'info': 'bi-info-circle-fill'}[cat] %}
+            <div class="toast {{ cat }}"><i class="bi {{ icon }}"></i><span>{{ message }}</span></div>
+        {% endfor %}
+    {% endwith %}
+</div>
+
+{% block sheets %}{% endblock %}
+
+<!-- Hoja global: Nuevo movimiento -->
+{% call sheet('sheet-new-movement', 'Nuevo movimiento') %}
+<form action="{{ url_for('add_movement') }}" method="POST" class="sheet-form" data-type="Gasto" data-reset-on-close>
+    <input type="hidden" name="next" value="{{ request.full_path.rstrip('?') }}">
+    <div class="sheet-body">
+        <div class="form-section">
+            <div class="segmented block lg type-switch" role="radiogroup" aria-label="Tipo de movimiento">
+                <input type="radio" id="qa-type-out" name="type" value="Gasto" checked>
+                <label for="qa-type-out">Gasto</label>
+                <input type="radio" id="qa-type-in" name="type" value="Ingreso">
+                <label for="qa-type-in">Ingreso</label>
+            </div>
+        </div>
+
+        <div class="form-section">
+            <div class="amount-field" data-tone="Gasto">
+                <label for="qa-amount">Monto</label>
+                <input type="text" class="amount-input currency-input" id="qa-amount" name="amount" value="$ 0,00" required autofocus>
+                <span class="hint">Escribe solo números; los dos últimos son centavos</span>
+            </div>
+        </div>
+
+        <div class="form-section">
+            <div class="group">
+                <div class="row stacked">
+                    <label class="sr-only" for="qa-desc">Descripción</label>
+                    <input type="text" id="qa-desc" name="description" placeholder="Descripción (ej. Supermercado)" required maxlength="120">
+                </div>
+                <label class="row">
+                    <span class="row-label">Fecha</span>
+                    <input type="date" name="start_date" value="{{ qa_today }}" required>
+                </label>
+            </div>
+        </div>
+
+        {% if qa_cards %}
+        <div class="form-section only-expense">
+            <span class="form-section-label" id="qa-source-label">Se paga con</span>
+            <div class="chips" role="radiogroup" aria-labelledby="qa-source-label">
+                <input type="radio" id="qa-src-acc" name="payment_method" value="account" checked>
+                <label for="qa-src-acc"><i class="bi bi-bank"></i> Cuentas</label>
+                {% for c in qa_cards %}
+                <input type="radio" id="qa-src-{{ c.id }}" name="payment_method" value="card_{{ c.id }}">
+                <label for="qa-src-{{ c.id }}"><i class="bi bi-credit-card"></i> {{ c.name }}</label>
+                {% endfor %}
+            </div>
+            <p class="form-note">Con tarjeta, el gasto se descuenta en la fecha de pago según su corte.</p>
+        </div>
+        {% else %}
+        <input type="hidden" name="payment_method" value="account">
+        {% endif %}
+
+        <div class="form-section">
+            <div class="group">
+                <label class="row">
+                    <span class="row-label">Se repite</span>
+                    <span class="switch">
+                        <input type="checkbox" name="is_recurring" data-reveal="qa-periodicity" role="switch">
+                        <span class="track"></span>
+                    </span>
+                </label>
+            </div>
+            <div class="reveal" id="qa-periodicity">
+                <div>
+                    <div class="reveal-inner">
+                        <span class="form-section-label" id="qa-period-label">Cada cuánto</span>
+                        <div class="chips" role="radiogroup" aria-labelledby="qa-period-label">
+                            {% for p in ['Semanal', 'Quincenal', 'Mensual', 'Bimestral', 'Semestral', 'Anual'] %}
+                            <input type="radio" id="qa-per-{{ loop.index }}" name="periodicity" value="{{ p }}" {% if p == 'Mensual' %}checked{% endif %}>
+                            <label for="qa-per-{{ loop.index }}">{{ p }}</label>
+                            {% endfor %}
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="sheet-footer">
+        <button type="submit" class="btn btn-primary btn-lg btn-block">Guardar movimiento</button>
+    </div>
+</form>
+{% endcall %}
+
+<!-- Diálogo de confirmación -->
+<div class="sheet alert-dialog" id="confirm-dialog" role="alertdialog" aria-modal="true" aria-labelledby="confirm-title" aria-describedby="confirm-detail">
+    <div class="sheet-scrim" data-sheet-close></div>
+    <div class="sheet-panel" tabindex="-1">
+        <div class="alert-body">
+            <h2 id="confirm-title" data-confirm-title>¿Eliminar?</h2>
+            <p id="confirm-detail" data-confirm-detail>Esta acción no se puede deshacer.</p>
+        </div>
+        <div class="alert-actions">
+            <button type="button" data-sheet-close>Cancelar</button>
+            <button type="button" class="destructive" data-confirm-accept>Eliminar</button>
+        </div>
+    </div>
+</div>
+
+<script src="{{ url_for('static', filename='js/main.js') }}"></script>
+<script>
+    // Un ingreso no se paga con tarjeta: ocultar el origen y volver a "Cuentas"
+    document.querySelectorAll('form.sheet-form[data-type]').forEach(form => {
+        form.addEventListener('change', e => {
+            if (e.target.name !== 'type') return;
+            form.dataset.type = e.target.value;
+            if (e.target.value === 'Ingreso') {
+                const acc = form.querySelector('input[name="payment_method"][value="account"]');
+                if (acc) acc.checked = true;
+            }
+        });
+    });
+</script>
+{% block extra_scripts %}{% endblock %}
 </body>
 </html>
-

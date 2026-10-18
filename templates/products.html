@@ -1,600 +1,382 @@
 {% extends 'base.html' %}
+{% from '_macros.html' import sheet, money %}
 
-{% block title %}Cuentas y Tarjetas - Gestión Financiera{% endblock %}
+{% block title %}Cuentas y tarjetas · Gestión Financiera{% endblock %}
 
 {% block content %}
-<div class="row mb-4 align-items-center">
-    <div class="col-md-8">
-        <h2 class="fw-bold mb-0">Cuentas Bancarias y Tarjetas de Crédito</h2>
-        <p class="text-muted mb-0">Gestiona tus productos financieros, consulta sus tablas consolidadas y actualiza sus saldos y deudas día a día.</p>
+{% set total_balance = accounts | sum(attribute='balance') %}
+{% set total_debt = cards | sum(attribute='current_debt') %}
+{% set total_limit = cards | sum(attribute='credit_limit') %}
+{% set total_next = cards | sum(attribute='next_payment_amount') %}
+
+<header class="page-header">
+    <div>
+        <h1 class="page-title">Cuentas y tarjetas</h1>
+        <p class="page-subtitle">Toca una cuenta o tarjeta para actualizar su saldo, ver su historial o editarla.</p>
     </div>
-    <div class="col-md-4 d-flex justify-content-md-end gap-2 mt-3 mt-md-0">
-        <button class="btn btn-primary fw-semibold" data-bs-toggle="modal" data-bs-target="#createAccountModal">
-            <i class="bi bi-bank me-1"></i> + Nueva Cuenta
-        </button>
-        <button class="btn btn-warning text-dark fw-semibold" data-bs-toggle="modal" data-bs-target="#createCardModal">
-            <i class="bi bi-credit-card me-1"></i> + Nueva Tarjeta
-        </button>
+    <div class="page-actions">
+        <button type="button" class="btn btn-secondary" data-sheet-open="new-account"><i class="bi bi-bank"></i> Nueva cuenta</button>
+        <button type="button" class="btn btn-secondary" data-sheet-open="new-card"><i class="bi bi-credit-card"></i> Nueva tarjeta</button>
     </div>
+</header>
+
+<section class="stat-grid" aria-label="Totales" style="margin-top: 0">
+    <div class="card stat">
+        <span class="stat-label"><i class="bi bi-bank"></i> Total en cuentas</span>
+        <span class="stat-value">{{ total_balance | format_currency }}</span>
+        <span class="stat-foot">{{ accounts | length }} {{ 'cuenta' if accounts | length == 1 else 'cuentas' }}</span>
+    </div>
+    <div class="card stat">
+        <span class="stat-label"><i class="bi bi-credit-card"></i> Deuda en tarjetas</span>
+        <span class="stat-value">{{ total_debt | format_currency }}</span>
+        <span class="stat-foot">Próximos pagos: {{ total_next | format_currency }}</span>
+    </div>
+    <div class="card stat">
+        {% set used = (total_debt / total_limit * 100) if total_limit > 0 else 0 %}
+        <span class="stat-label"><i class="bi bi-speedometer2"></i> Cupo disponible</span>
+        <span class="stat-value">{{ (total_limit - total_debt) | format_currency }}</span>
+        <div class="meter {{ 'risk' if used >= 80 else ('warn' if used >= 50) }}" style="--value: {{ [used, 100] | min | round(1) }}%; margin: 6px 0 2px" role="meter" aria-valuenow="{{ used | round }}" aria-valuemin="0" aria-valuemax="100" aria-label="Uso del cupo"><span></span></div>
+        <span class="stat-foot">Usas el {{ used | round | int }} % de {{ total_limit | format_currency }}</span>
+    </div>
+</section>
+
+<!-- Cuentas -->
+<div class="section-title">
+    <h2>Cuentas</h2>
+    <span class="muted">Ahorro y corriente</span>
 </div>
+{% if accounts %}
+<div class="tiles">
+    {% for acc in accounts %}
+    <button type="button" class="tile" data-sheet-open="acc-{{ acc.id }}" aria-label="{{ acc.name }}: {{ acc.balance | format_currency }}. Ver detalle">
+        <span class="tile-head">
+            <span class="glyph" style="background: var(--accent-soft); color: var(--accent)"><i class="bi bi-bank"></i></span>
+            <span class="tile-name">{{ acc.name }}</span>
+            <i class="bi bi-chevron-right tile-chevron"></i>
+        </span>
+        <span class="tile-label">Saldo disponible</span>
+        <span class="tile-value">{{ money(acc.balance) }}</span>
+        <span class="tile-foot">
+            <span>Actualizado {{ acc.updated_at | fecha_corta }}</span>
+            <svg class="spark" aria-hidden="true" data-values="{{ acc.balance_history | map(attribute='balance') | list | tojson | forceescape }}"></svg>
+        </span>
+    </button>
+    {% endfor %}
+    <button type="button" class="add-tile" data-sheet-open="new-account"><i class="bi bi-plus-circle"></i> Agregar cuenta</button>
+</div>
+{% else %}
+<div class="card empty">
+    <i class="bi bi-bank"></i>
+    <h3>Agrega tu primera cuenta</h3>
+    <p>Registra tus cuentas de ahorro o corriente con su saldo actual. Es la base de la proyección.</p>
+    <button type="button" class="btn btn-primary" data-sheet-open="new-account"><i class="bi bi-plus-lg"></i> Nueva cuenta</button>
+</div>
+{% endif %}
 
-<!-- ═══════════════════════════════════════════════════════════════════════ -->
-<!-- BLOQUE 1: TABLA DE CUENTAS DE AHORRO / CORRIENTES (ARRIBA)             -->
-<!-- ═══════════════════════════════════════════════════════════════════════ -->
-<div class="row mb-5">
-    <div class="col-12">
-        <div class="card shadow-sm border-0">
-            <div class="card-header bg-white py-3 d-flex justify-content-between align-items-center flex-wrap gap-2 border-bottom">
-                <div class="d-flex align-items-center gap-2">
-                    <div class="bg-primary-subtle text-primary p-2 rounded-circle">
-                        <i class="bi bi-bank fs-5"></i>
-                    </div>
-                    <div>
-                        <h5 class="fw-bold mb-0">Cuentas de Ahorro y Corrientes</h5>
-                        <small class="text-muted">Fondos líquidos disponibles para operaciones y pagos</small>
-                    </div>
-                </div>
-                <div class="d-flex align-items-center gap-2">
-                    <span class="badge bg-primary-subtle text-primary fs-6 px-3 py-2">
-                        Total: {{ accounts|length }} Cuentas
-                    </span>
-                    <button class="btn btn-sm btn-outline-primary fw-semibold" data-bs-toggle="modal" data-bs-target="#createAccountModal">
-                        <i class="bi bi-plus-lg me-1"></i> Agregar Cuenta
-                    </button>
-                </div>
-            </div>
+<!-- Tarjetas -->
+<div class="section-title">
+    <h2>Tarjetas de crédito</h2>
+    <span class="muted">Cupo, deuda y ciclo de pago</span>
+</div>
+{% if cards %}
+<div class="tiles">
+    {% for c in cards %}
+    {% set pct = (c.current_debt / c.credit_limit * 100) if c.credit_limit > 0 else 0 %}
+    <button type="button" class="tile cc" data-sheet-open="card-{{ c.id }}" aria-label="{{ c.name }}: deuda {{ c.current_debt | format_currency }}. Ver detalle">
+        <span class="tile-head">
+            <span class="glyph"><i class="bi bi-credit-card-2-front"></i></span>
+            <span class="tile-name">{{ c.name }}</span>
+            <i class="bi bi-chevron-right tile-chevron"></i>
+        </span>
+        <span class="tile-label">Deuda actual</span>
+        <span class="tile-value">{{ money(c.current_debt) }}</span>
+        {% if c.credit_limit > 0 %}
+        <span class="meter {{ 'risk' if pct >= 80 else ('warn' if pct >= 50) }}" style="--value: {{ [pct, 100] | min | round(1) }}%"><span></span></span>
+        <span class="cc-row"><span>Usas el {{ pct | round | int }} %</span><span>Cupo {{ c.credit_limit | format_currency }}</span></span>
+        {% endif %}
+        <span class="cc-row"><span>Próximo pago <strong>{{ c.next_payment_amount | format_currency }}</strong></span><span>Día {{ c.due_day }}</span></span>
+    </button>
+    {% endfor %}
+    <button type="button" class="add-tile" data-sheet-open="new-card"><i class="bi bi-plus-circle"></i> Agregar tarjeta</button>
+</div>
+{% else %}
+<div class="card empty">
+    <i class="bi bi-credit-card"></i>
+    <h3>Sin tarjetas registradas</h3>
+    <p>Agrega tus tarjetas con su día de corte y de pago para que sus cuotas entren en la proyección.</p>
+    <button type="button" class="btn btn-primary" data-sheet-open="new-card"><i class="bi bi-plus-lg"></i> Nueva tarjeta</button>
+</div>
+{% endif %}
+{% endblock %}
 
-            <div class="card-body p-0">
-                <div class="table-responsive">
-                    <table class="table table-hover align-middle mb-0">
-                        <thead class="table-light">
-                            <tr>
-                                <th class="ps-4">Nombre de la Cuenta</th>
-                                <th class="text-end">Saldo Actual</th>
-                                <th class="text-center">Última Actualización</th>
-                                <th class="text-center">Historial Registrado</th>
-                                <th class="text-end pe-4">Acciones</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {% if accounts %}
-                                {% for acc in accounts %}
-                                    <tr>
-                                        <td class="ps-4">
-                                            <div class="fw-bold text-dark fs-6">{{ acc.name }}</div>
-                                            <small class="text-muted">ID: #{{ acc.id }}</small>
-                                        </td>
-                                        <td class="text-end fw-bold text-success fs-6">
-                                            {{ acc.balance | format_currency }}
-                                        </td>
-                                        <td class="text-center text-muted">
-                                            <span class="badge bg-light text-secondary border px-2 py-1">
-                                                <i class="bi bi-calendar3 me-1"></i>{{ acc.updated_at }}
-                                            </span>
-                                        </td>
-                                        <td class="text-center">
-                                            <button class="btn btn-sm btn-outline-info" data-bs-toggle="modal" data-bs-target="#historyAccountModal{{ acc.id }}" title="Ver historial de saldos">
-                                                <i class="bi bi-clock-history me-1"></i>{{ acc.balance_history|length }} registros
-                                            </button>
-                                        </td>
-                                        <td class="text-end pe-4">
-                                            <!-- Botón Actualizar Saldo con Fecha -->
-                                            <button class="btn btn-sm btn-success text-white me-1 fw-semibold" data-bs-toggle="modal" data-bs-target="#newBalanceModal{{ acc.id }}" title="Registrar Saldo con Fecha">
-                                                <i class="bi bi-plus-circle me-1"></i> Actualizar Saldo
-                                            </button>
-                                            <!-- Botón Editar -->
-                                            <button class="btn btn-sm btn-outline-secondary me-1" data-bs-toggle="modal" data-bs-target="#editAccountModal{{ acc.id }}" title="Editar Nombre">
-                                                <i class="bi bi-pencil"></i>
-                                            </button>
-                                            <!-- Botón Eliminar -->
-                                            <form action="{{ url_for('delete_account', id=acc.id) }}" method="POST" class="d-inline" onsubmit="return confirm('¿Seguro que deseas eliminar esta cuenta y todo su historial?');">
-                                                <button type="submit" class="btn btn-sm btn-outline-danger" title="Eliminar Cuenta">
-                                                    <i class="bi bi-trash"></i>
-                                                </button>
-                                            </form>
-                                        </td>
-                                    </tr>
-                                {% endfor %}
-                            {% else %}
-                                <tr>
-                                    <td colspan="5" class="text-center py-5 text-muted">
-                                        <i class="bi bi-bank fs-1 d-block mb-2 text-secondary"></i>
-                                        <p class="mb-2 fw-semibold">No tienes cuentas bancarias registradas.</p>
-                                        <button class="btn btn-primary btn-sm" data-bs-toggle="modal" data-bs-target="#createAccountModal">
-                                            <i class="bi bi-plus-lg me-1"></i> Registrar tu primera cuenta
-                                        </button>
-                                    </td>
-                                </tr>
-                            {% endif %}
-                        </tbody>
-                    </table>
+
+{% block sheets %}
+
+<!-- ═══ Nueva cuenta ═══ -->
+{% call sheet('new-account', 'Nueva cuenta') %}
+<form action="{{ url_for('add_account') }}" method="POST" data-reset-on-close>
+    <div class="sheet-body">
+        <div class="form-section">
+            <div class="group">
+                <div class="row stacked">
+                    <label class="sr-only" for="na-name">Nombre de la cuenta</label>
+                    <input type="text" id="na-name" name="name" placeholder="Nombre (ej. Ahorros Bancolombia)" required maxlength="80" autofocus>
                 </div>
             </div>
         </div>
-    </div>
-</div>
-
-
-<!-- ═══════════════════════════════════════════════════════════════════════ -->
-<!-- BLOQUE 2: TABLA DE TARJETAS DE CRÉDITO (DEBAJO DE CUENTAS)            -->
-<!-- ═══════════════════════════════════════════════════════════════════════ -->
-<div class="row">
-    <div class="col-12">
-        <div class="card shadow-sm border-0">
-            <div class="card-header bg-white py-3 d-flex justify-content-between align-items-center flex-wrap gap-2 border-bottom">
-                <div class="d-flex align-items-center gap-2">
-                    <div class="bg-warning-subtle text-warning-emphasis p-2 rounded-circle">
-                        <i class="bi bi-credit-card fs-5"></i>
-                    </div>
-                    <div>
-                        <h5 class="fw-bold mb-0">Tarjetas de Crédito</h5>
-                        <small class="text-muted">Cupos, deudas actuales facturadas y fechas de corte y pago</small>
-                    </div>
-                </div>
-                <div class="d-flex align-items-center gap-2">
-                    <span class="badge bg-warning-subtle text-warning-emphasis fs-6 px-3 py-2 border border-warning">
-                        Total: {{ cards|length }} Tarjetas
-                    </span>
-                    <button class="btn btn-sm btn-outline-warning text-dark fw-semibold" data-bs-toggle="modal" data-bs-target="#createCardModal">
-                        <i class="bi bi-plus-lg me-1"></i> Agregar Tarjeta
-                    </button>
-                </div>
+        <div class="form-section">
+            <div class="amount-field">
+                <label for="na-balance">Saldo actual</label>
+                <input type="text" class="amount-input currency-input" id="na-balance" name="balance" value="$ 0,00" required>
             </div>
-
-            <div class="card-body p-0">
-                <div class="table-responsive">
-                    <table class="table table-hover align-middle mb-0">
-                        <thead class="table-light">
-                            <tr>
-                                <th class="ps-4">Tarjeta</th>
-                                <th class="text-end">Cupo Total</th>
-                                <th class="text-end">Deuda Actual Total</th>
-                                <th class="text-end">Monto Próx. Pago</th>
-                                <th class="text-center">Ciclo (Corte / Pago)</th>
-                                <th class="text-center">Historial</th>
-                                <th class="text-end pe-4">Acciones</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {% if cards %}
-                                {% for c in cards %}
-                                    <tr>
-                                        <td class="ps-4">
-                                            <div class="fw-bold text-dark fs-6">{{ c.name }}</div>
-                                            <small class="text-muted">ID: #{{ c.id }}</small>
-                                        </td>
-                                        <td class="text-end text-muted font-monospace">
-                                            {{ c.credit_limit | format_currency }}
-                                        </td>
-                                        <td class="text-end fw-bold text-danger fs-6 font-monospace">
-                                            {{ c.current_debt | format_currency }}
-                                        </td>
-                                        <td class="text-end fw-bold text-warning-emphasis font-monospace">
-                                            {{ c.next_payment_amount | format_currency }}
-                                        </td>
-                                        <td class="text-center">
-                                            <span class="badge bg-secondary-subtle text-secondary-emphasis border me-1">
-                                                Corte: Día {{ c.statement_day }}
-                                            </span>
-                                            <span class="badge bg-primary-subtle text-primary border">
-                                                Pago: Día {{ c.due_day }}
-                                            </span>
-                                        </td>
-                                        <td class="text-center">
-                                            <button class="btn btn-sm btn-outline-info" data-bs-toggle="modal" data-bs-target="#historyCardModal{{ c.id }}" title="Ver historial de deuda">
-                                                <i class="bi bi-clock-history me-1"></i>{{ c.debt_history|length }} registros
-                                            </button>
-                                        </td>
-                                        <td class="text-end pe-4">
-                                            <!-- Botón Actualizar Deuda con Fecha -->
-                                            <button class="btn btn-sm btn-warning text-dark me-1 fw-semibold" data-bs-toggle="modal" data-bs-target="#newDebtModal{{ c.id }}" title="Actualizar Deuda con Fecha">
-                                                <i class="bi bi-plus-circle me-1"></i> Actualizar Deuda
-                                            </button>
-                                            <!-- Botón Editar -->
-                                            <button class="btn btn-sm btn-outline-secondary me-1" data-bs-toggle="modal" data-bs-target="#editCardModal{{ c.id }}" title="Editar Parámetros">
-                                                <i class="bi bi-pencil"></i>
-                                            </button>
-                                            <!-- Botón Eliminar -->
-                                            <form action="{{ url_for('delete_card', id=c.id) }}" method="POST" class="d-inline" onsubmit="return confirm('¿Seguro que deseas eliminar esta tarjeta y todo su historial?');">
-                                                <button type="submit" class="btn btn-sm btn-outline-danger" title="Eliminar Tarjeta">
-                                                    <i class="bi bi-trash"></i>
-                                                </button>
-                                            </form>
-                                        </td>
-                                    </tr>
-                                {% endfor %}
-                            {% else %}
-                                <tr>
-                                    <td colspan="7" class="text-center py-5 text-muted">
-                                        <i class="bi bi-credit-card fs-1 d-block mb-2 text-secondary"></i>
-                                        <p class="mb-2 fw-semibold">No tienes tarjetas de crédito registradas.</p>
-                                        <button class="btn btn-warning text-dark btn-sm fw-semibold" data-bs-toggle="modal" data-bs-target="#createCardModal">
-                                            <i class="bi bi-plus-lg me-1"></i> Registrar tu primera tarjeta
-                                        </button>
-                                    </td>
-                                </tr>
-                            {% endif %}
-                        </tbody>
-                    </table>
+        </div>
+        <div class="form-section">
+            <div class="group">
+                <label class="row"><span class="row-label">Fecha del saldo</span><input type="date" name="recorded_at" value="{{ today }}" required></label>
+                <div class="row stacked">
+                    <label class="sr-only" for="na-note">Nota</label>
+                    <input type="text" id="na-note" name="note" placeholder="Nota (opcional)" maxlength="120">
                 </div>
             </div>
         </div>
     </div>
-</div>
+    <div class="sheet-footer"><button type="submit" class="btn btn-primary btn-lg btn-block">Agregar cuenta</button></div>
+</form>
+{% endcall %}
 
-
-<!-- ═══════════════════════════════════════════════════════════════════════ -->
-<!-- MODALES: CREACIÓN DE PRODUCTOS                                         -->
-<!-- ═══════════════════════════════════════════════════════════════════════ -->
-
-<!-- Modal Crear Nueva Cuenta -->
-<div class="modal fade" id="createAccountModal" tabindex="-1" aria-hidden="true">
-    <div class="modal-dialog">
-        <div class="modal-content">
-            <form id="form-create-account" action="{{ url_for('add_account') }}" method="POST">
-                <div class="modal-header bg-primary text-white">
-                    <h5 class="modal-title fw-bold"><i class="bi bi-bank me-2"></i>Nueva Cuenta de Ahorro / Corriente</h5>
-                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+<!-- ═══ Nueva tarjeta ═══ -->
+{% call sheet('new-card', 'Nueva tarjeta') %}
+<form action="{{ url_for('add_card') }}" method="POST" data-reset-on-close>
+    <div class="sheet-body">
+        <div class="form-section">
+            <div class="group">
+                <div class="row stacked">
+                    <label class="sr-only" for="nc-name">Nombre de la tarjeta</label>
+                    <input type="text" id="nc-name" name="name" placeholder="Nombre (ej. Visa Bancolombia)" required maxlength="80" autofocus>
                 </div>
-                <div class="modal-body">
-                    <div class="mb-3">
-                        <label for="acc_name" class="form-label fw-semibold">Nombre de la Cuenta *</label>
-                        <input type="text" class="form-control" id="acc_name" name="name" placeholder="Ej: Cuenta Ahorros Bancolombia" required>
-                    </div>
-                    <div class="mb-3">
-                        <label for="acc_balance" class="form-label fw-semibold">Saldo Inicial *</label>
-                        <input type="text" class="form-control currency-input fs-5" id="acc_balance" name="balance" value="$ 0,00" required>
-                        <div class="form-text">Monto en formato $ XXX XXX XXX,XX</div>
-                    </div>
-                    <div class="mb-3">
-                        <label for="acc_date" class="form-label fw-semibold">Fecha de Saldo *</label>
-                        <input type="date" class="form-control" id="acc_date" name="recorded_at" value="{{ today }}" required>
-                    </div>
-                    <div class="mb-3">
-                        <label for="acc_note" class="form-label fw-semibold">Nota u Observación</label>
-                        <input type="text" class="form-control" id="acc_note" name="note" placeholder="Ej: Saldo inicial apertura">
-                    </div>
+            </div>
+        </div>
+        <div class="form-section">
+            <span class="form-section-label">Montos</span>
+            <div class="group">
+                <label class="row"><span class="row-label">Cupo total</span><input type="text" class="currency-input" name="credit_limit" value="$ 0,00"></label>
+                <label class="row"><span class="row-label">Deuda actual</span><input type="text" class="currency-input" name="current_debt" value="$ 0,00"></label>
+                <label class="row"><span class="row-label">Próximo pago</span><input type="text" class="currency-input" name="next_payment_amount" value="$ 0,00"></label>
+            </div>
+            <p class="form-note">El próximo pago es lo facturado para la fecha de pago más cercana; el resto de la deuda se proyecta al ciclo siguiente.</p>
+        </div>
+        <div class="form-section">
+            <span class="form-section-label">Ciclo de facturación</span>
+            <div class="group">
+                <label class="row"><span class="row-label">Día de corte</span><input type="number" name="statement_day" min="1" max="31" value="15" data-default-val="15" required></label>
+                <label class="row"><span class="row-label">Día de pago</span><input type="number" name="due_day" min="1" max="31" value="5" data-default-val="5" required></label>
+            </div>
+        </div>
+        <div class="form-section">
+            <div class="group">
+                <label class="row"><span class="row-label">Fecha del registro</span><input type="date" name="recorded_at" value="{{ today }}" required></label>
+                <div class="row stacked">
+                    <label class="sr-only" for="nc-note">Nota</label>
+                    <input type="text" id="nc-note" name="note" placeholder="Nota (opcional)" maxlength="120">
                 </div>
-                <div class="modal-footer">
-                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
-                    <button type="submit" class="btn btn-primary fw-semibold"><i class="bi bi-save me-1"></i> Guardar Cuenta</button>
-                </div>
-            </form>
+            </div>
         </div>
     </div>
-</div>
+    <div class="sheet-footer"><button type="submit" class="btn btn-primary btn-lg btn-block">Agregar tarjeta</button></div>
+</form>
+{% endcall %}
 
-<!-- Modal Crear Nueva Tarjeta -->
-<div class="modal fade" id="createCardModal" tabindex="-1" aria-hidden="true">
-    <div class="modal-dialog">
-        <div class="modal-content">
-            <form id="form-create-card" action="{{ url_for('add_card') }}" method="POST">
-                <div class="modal-header bg-warning text-dark">
-                    <h5 class="modal-title fw-bold"><i class="bi bi-credit-card me-2"></i>Nueva Tarjeta de Crédito</h5>
-                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-                </div>
-                <div class="modal-body">
-                    <div class="mb-3">
-                        <label for="card_name" class="form-label fw-semibold">Nombre de la Tarjeta *</label>
-                        <input type="text" class="form-control" id="card_name" name="name" placeholder="Ej: Visa Signature Bancolombia" required>
-                    </div>
-                    <div class="mb-3">
-                        <label for="card_limit" class="form-label fw-semibold">Cupo Total</label>
-                        <input type="text" class="form-control currency-input" id="card_limit" name="credit_limit" value="$ 0,00">
-                    </div>
-                    <div class="mb-3">
-                        <label for="card_debt" class="form-label fw-semibold">Deuda Actual Total</label>
-                        <input type="text" class="form-control currency-input text-danger" id="card_debt" name="current_debt" value="$ 0,00">
-                    </div>
-                    <div class="mb-3">
-                        <label for="card_next_payment" class="form-label fw-semibold">Monto Próximo Pago</label>
-                        <input type="text" class="form-control currency-input text-warning-emphasis" id="card_next_payment" name="next_payment_amount" value="$ 0,00">
-                        <div class="form-text">Monto facturado para pagar en la fecha más próxima.</div>
-                    </div>
-                    <div class="row g-2 mb-3">
-                        <div class="col-6">
-                            <label for="card_statement_day" class="form-label fw-semibold">Día Corte (1-31)</label>
-                            <input type="number" class="form-control" id="card_statement_day" name="statement_day" min="1" max="31" value="15" data-default-val="15" required>
-                        </div>
-                        <div class="col-6">
-                            <label for="card_due_day" class="form-label fw-semibold">Día Pago (1-31)</label>
-                            <input type="number" class="form-control" id="card_due_day" name="due_day" min="1" max="31" value="5" data-default-val="5" required>
-                        </div>
-                    </div>
-                    <div class="mb-3">
-                        <label for="card_date" class="form-label fw-semibold">Fecha de Registro *</label>
-                        <input type="date" class="form-control" id="card_date" name="recorded_at" value="{{ today }}" required>
-                    </div>
-                    <div class="mb-3">
-                        <label for="card_note" class="form-label fw-semibold">Nota u Observación</label>
-                        <input type="text" class="form-control" id="card_note" name="note" placeholder="Ej: Registro inicial tarjeta">
-                    </div>
-                </div>
-                <div class="modal-footer">
-                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
-                    <button type="submit" class="btn btn-warning text-dark fw-semibold"><i class="bi bi-save me-1"></i> Guardar Tarjeta</button>
-                </div>
-            </form>
-        </div>
-    </div>
-</div>
-
-
-<!-- ═══════════════════════════════════════════════════════════════════════ -->
-<!-- MODALES INDIVIDUALES POR CUENTA (Actualizar Saldo, Editar, Historial)   -->
-<!-- ═══════════════════════════════════════════════════════════════════════ -->
+<!-- ═══ Detalle y edición de cada cuenta ═══ -->
 {% for acc in accounts %}
-    <!-- Modal Registrar Nuevo Saldo con Fecha -->
-    <div class="modal fade" id="newBalanceModal{{ acc.id }}" tabindex="-1" aria-hidden="true">
-        <div class="modal-dialog">
-            <div class="modal-content">
-                <form action="{{ url_for('add_account_history_record', id=acc.id) }}" method="POST">
-                    <div class="modal-header bg-success text-white">
-                        <h5 class="modal-title fw-bold"><i class="bi bi-calendar-check me-2"></i>Actualizar Saldo: {{ acc.name }}</h5>
-                        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
-                    </div>
-                    <div class="modal-body">
-                        <p class="text-muted small mb-3">Registra el saldo real en una fecha específica para mantener la curva histórica día a día.</p>
-                        <div class="mb-3">
-                            <label class="form-label fw-semibold">Nuevo Saldo Real *</label>
-                            <input type="text" class="form-control currency-input fs-5" name="balance" value="{{ acc.balance }}" required>
-                        </div>
-                        <div class="mb-3">
-                            <label class="form-label fw-semibold">Fecha del Saldo *</label>
-                            <input type="date" class="form-control" name="recorded_at" value="{{ today }}" required>
-                        </div>
-                        <div class="mb-3">
-                            <label class="form-label fw-semibold">Nota / Motivo</label>
-                            <input type="text" class="form-control" name="note" placeholder="Ej: Balance fin de mes, Pago de nómina...">
-                        </div>
-                    </div>
-                    <div class="modal-footer">
-                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
-                        <button type="submit" class="btn btn-success fw-semibold"><i class="bi bi-save me-1"></i>Guardar en Historial</button>
-                    </div>
-                </form>
-            </div>
-        </div>
+{% set hist = acc.balance_history %}
+{% call sheet('acc-' ~ acc.id, acc.name, close_label='Cerrar', wide=True) %}
+<div class="sheet-body">
+    <div class="detail-hero">
+        <div class="tile-label">Saldo actual</div>
+        <div class="value">{{ money(acc.balance) }}</div>
+        <div class="muted">Actualizado {{ acc.updated_at | fecha_corta }}</div>
     </div>
 
-    <!-- Modal Editar Cuenta -->
-    <div class="modal fade" id="editAccountModal{{ acc.id }}" tabindex="-1" aria-hidden="true">
-        <div class="modal-dialog">
-            <div class="modal-content">
-                <form action="{{ url_for('edit_account', id=acc.id) }}" method="POST">
-                    <div class="modal-header bg-light">
-                        <h5 class="modal-title fw-bold">Editar Cuenta: {{ acc.name }}</h5>
-                        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-                    </div>
-                    <div class="modal-body">
-                        <div class="mb-3">
-                            <label class="form-label fw-semibold">Nombre</label>
-                            <input type="text" class="form-control" name="name" value="{{ acc.name }}" required>
-                        </div>
-                        <div class="mb-3">
-                            <label class="form-label fw-semibold">Saldo</label>
-                            <input type="text" class="form-control currency-input fs-5" name="balance" value="{{ acc.balance }}">
-                        </div>
-                        <div class="mb-3">
-                            <label class="form-label fw-semibold">Fecha de Actualización</label>
-                            <input type="date" class="form-control" name="recorded_at" value="{{ today }}" required>
-                        </div>
-                        <div class="mb-3">
-                            <label class="form-label fw-semibold">Nota</label>
-                            <input type="text" class="form-control" name="note" value="Actualización">
-                        </div>
-                    </div>
-                    <div class="modal-footer">
-                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
-                        <button type="submit" class="btn btn-primary fw-semibold">Guardar Cambios</button>
-                    </div>
-                </form>
+    <form action="{{ url_for('add_account_history_record', id=acc.id) }}" method="POST" class="form-section">
+        <span class="form-section-label">Registrar nuevo saldo</span>
+        <div class="group">
+            <label class="row"><span class="row-label">Saldo</span><input type="text" class="currency-input" name="balance" value="{{ acc.balance }}" required></label>
+            <label class="row"><span class="row-label">Fecha</span><input type="date" name="recorded_at" value="{{ today }}" required></label>
+            <div class="row stacked">
+                <label class="sr-only" for="ab-note-{{ acc.id }}">Nota</label>
+                <input type="text" id="ab-note-{{ acc.id }}" name="note" placeholder="Nota (ej. cierre de mes)" maxlength="120">
             </div>
         </div>
+        <button type="submit" class="btn btn-primary btn-block mt-l">Guardar saldo</button>
+    </form>
+
+    <div class="form-section">
+        <span class="form-section-label">Historial · {{ hist | length }} {{ 'registro' if hist | length == 1 else 'registros' }}</span>
+        {% if hist %}
+        <ul class="list history">
+            {% for h in hist | reverse %}
+            {% set idx = hist | length - loop.index %}
+            {% set prev = hist[idx - 1] if idx > 0 else none %}
+            <li class="list-item">
+                <div class="body">
+                    <div class="title num">{{ h.balance | format_currency }}</div>
+                    <div class="meta">{{ h.recorded_at | fecha_corta }}{% if h.note %} · {{ h.note }}{% endif %}</div>
+                </div>
+                {% if prev %}
+                {% set d = h.balance - prev.balance %}
+                <div class="amount {{ 'positive' if d > 0 else ('negative' if d < 0) }}" style="font-size: 0.8125rem">
+                    {% if d != 0 %}<i class="bi {{ 'bi-arrow-up-right' if d > 0 else 'bi-arrow-down-right' }}"></i> {{ '+' if d > 0 }}{{ d | format_currency }}{% else %}<span class="muted">Sin cambio</span>{% endif %}
+                </div>
+                {% endif %}
+                <form action="{{ url_for('delete_account_history_record', history_id=h.id) }}" method="POST" class="actions"
+                      data-confirm="¿Eliminar este registro?" data-confirm-detail="Saldo de {{ h.balance | format_currency }} del {{ h.recorded_at | fecha_corta }}.">
+                    <button type="submit" class="icon-btn danger" aria-label="Eliminar registro del {{ h.recorded_at | fecha_corta }}"><i class="bi bi-trash3"></i></button>
+                </form>
+            </li>
+            {% endfor %}
+        </ul>
+        {% else %}
+        <p class="form-note">Aún no hay registros para esta cuenta.</p>
+        {% endif %}
     </div>
 
-    <!-- Modal Ver Historial de la Cuenta -->
-    <div class="modal fade" id="historyAccountModal{{ acc.id }}" tabindex="-1" aria-hidden="true">
-        <div class="modal-dialog modal-lg">
-            <div class="modal-content">
-                <div class="modal-header bg-light">
-                    <h5 class="modal-title fw-bold"><i class="bi bi-clock-history me-2 text-primary"></i>Historial de Saldos: {{ acc.name }}</h5>
-                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-                </div>
-                <div class="modal-body p-0">
-                    <div class="table-responsive">
-                        <table class="table table-striped table-hover mb-0 align-middle">
-                            <thead class="table-light">
-                                <tr>
-                                    <th>Fecha</th>
-                                    <th class="text-end">Saldo Registrado</th>
-                                    <th>Nota / Detalle</th>
-                                    <th class="text-end pe-3">Acción</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                {% if acc.balance_history %}
-                                    {% for h in acc.balance_history %}
-                                        <tr>
-                                            <td><span class="badge bg-light text-dark border">{{ h.recorded_at }}</span></td>
-                                            <td class="text-end fw-bold text-success">{{ h.balance | format_currency }}</td>
-                                            <td class="text-muted small">{{ h.note or '-' }}</td>
-                                            <td class="text-end pe-3">
-                                                <form action="{{ url_for('delete_account_history_record', history_id=h.id) }}" method="POST" class="d-inline" onsubmit="return confirm('¿Eliminar este registro histórico?');">
-                                                    <button type="submit" class="btn btn-sm btn-outline-danger py-0 px-2" title="Eliminar registro">
-                                                        <i class="bi bi-x-lg"></i>
-                                                    </button>
-                                                </form>
-                                            </td>
-                                        </tr>
-                                    {% endfor %}
-                                {% else %}
-                                    <tr>
-                                        <td colspan="4" class="text-center py-4 text-muted">No hay registros históricos para esta cuenta.</td>
-                                    </tr>
-                                {% endif %}
-                            </tbody>
-                        </table>
-                    </div>
-                </div>
-                <div class="modal-footer">
-                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cerrar</button>
-                </div>
+    <div class="danger-zone">
+        <button type="button" class="btn btn-secondary" data-sheet-open="acc-edit-{{ acc.id }}"><i class="bi bi-pencil"></i> Editar</button>
+        <form action="{{ url_for('delete_account', id=acc.id) }}" method="POST"
+              data-confirm="¿Eliminar «{{ acc.name }}»?" data-confirm-detail="Se borrará la cuenta y todo su historial de saldos.">
+            <button type="submit" class="btn btn-danger"><i class="bi bi-trash3"></i> Eliminar</button>
+        </form>
+    </div>
+</div>
+{% endcall %}
+
+{% call sheet('acc-edit-' ~ acc.id, 'Editar cuenta') %}
+<form action="{{ url_for('edit_account', id=acc.id) }}" method="POST">
+    <div class="sheet-body">
+        <div class="form-section">
+            <div class="group">
+                <label class="row"><span class="row-label">Nombre</span><input type="text" name="name" value="{{ acc.name }}" required maxlength="80"></label>
+                <label class="row"><span class="row-label">Saldo</span><input type="text" class="currency-input" name="balance" value="{{ acc.balance }}"></label>
+                <label class="row"><span class="row-label">Fecha</span><input type="date" name="recorded_at" value="{{ today }}" required></label>
+                <label class="row"><span class="row-label">Nota</span><input type="text" name="note" value="Actualización" maxlength="120"></label>
             </div>
+            <p class="form-note">Guardar también añade un registro al historial con este saldo y fecha.</p>
         </div>
     </div>
+    <div class="sheet-footer"><button type="submit" class="btn btn-primary btn-lg btn-block">Guardar cambios</button></div>
+</form>
+{% endcall %}
 {% endfor %}
 
-
-<!-- ═══════════════════════════════════════════════════════════════════════ -->
-<!-- MODALES INDIVIDUALES POR TARJETA (Actualizar Deuda, Editar, Historial)  -->
-<!-- ═══════════════════════════════════════════════════════════════════════ -->
+<!-- ═══ Detalle y edición de cada tarjeta ═══ -->
 {% for c in cards %}
-    <!-- Modal Registrar Nueva Deuda con Fecha -->
-    <div class="modal fade" id="newDebtModal{{ c.id }}" tabindex="-1" aria-hidden="true">
-        <div class="modal-dialog">
-            <div class="modal-content">
-                <form action="{{ url_for('add_card_history_record', id=c.id) }}" method="POST">
-                    <div class="modal-header bg-warning text-dark">
-                        <h5 class="modal-title fw-bold"><i class="bi bi-calendar-check me-2"></i>Actualizar Deuda: {{ c.name }}</h5>
-                        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-                    </div>
-                    <div class="modal-body">
-                        <p class="text-muted small mb-3">Registra el estado de la deuda y próximo pago en una fecha específica para la curva histórica.</p>
-                        <div class="mb-3">
-                            <label class="form-label fw-semibold">Nueva Deuda Total *</label>
-                            <input type="text" class="form-control currency-input text-danger fs-5" name="current_debt" value="{{ c.current_debt }}" required>
-                        </div>
-                        <div class="mb-3">
-                            <label class="form-label fw-semibold">Monto Próximo Pago</label>
-                            <input type="text" class="form-control currency-input text-warning-emphasis" name="next_payment_amount" value="{{ c.next_payment_amount }}">
-                        </div>
-                        <div class="mb-3">
-                            <label class="form-label fw-semibold">Fecha del Registro *</label>
-                            <input type="date" class="form-control" name="recorded_at" value="{{ today }}" required>
-                        </div>
-                        <div class="mb-3">
-                            <label class="form-label fw-semibold">Nota / Motivo</label>
-                            <input type="text" class="form-control" name="note" placeholder="Ej: Extracto mes actual, Pago parcial realizado...">
-                        </div>
-                    </div>
-                    <div class="modal-footer">
-                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
-                        <button type="submit" class="btn btn-warning text-dark fw-semibold"><i class="bi bi-save me-1"></i>Guardar en Historial</button>
-                    </div>
-                </form>
-            </div>
-        </div>
+{% set hist = c.debt_history %}
+{% call sheet('card-' ~ c.id, c.name, close_label='Cerrar', wide=True) %}
+<div class="sheet-body">
+    <div class="detail-hero">
+        <div class="tile-label">Deuda actual</div>
+        <div class="value">{{ money(c.current_debt) }}</div>
+        {% if c.credit_limit > 0 %}
+        <div class="muted">Usas el {{ (c.current_debt / c.credit_limit * 100) | round | int }} % de tu cupo</div>
+        {% endif %}
     </div>
 
-    <!-- Modal Editar Tarjeta -->
-    <div class="modal fade" id="editCardModal{{ c.id }}" tabindex="-1" aria-hidden="true">
-        <div class="modal-dialog">
-            <div class="modal-content">
-                <form action="{{ url_for('edit_card', id=c.id) }}" method="POST">
-                    <div class="modal-header bg-light">
-                        <h5 class="modal-title fw-bold">Editar Tarjeta: {{ c.name }}</h5>
-                        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-                    </div>
-                    <div class="modal-body">
-                        <div class="mb-3">
-                            <label class="form-label fw-semibold">Nombre</label>
-                            <input type="text" class="form-control" name="name" value="{{ c.name }}" required>
-                        </div>
-                        <div class="mb-3">
-                            <label class="form-label fw-semibold">Cupo Total</label>
-                            <input type="text" class="form-control currency-input" name="credit_limit" value="{{ c.credit_limit }}">
-                        </div>
-                        <div class="mb-3">
-                            <label class="form-label fw-semibold">Deuda Actual</label>
-                            <input type="text" class="form-control currency-input text-danger" name="current_debt" value="{{ c.current_debt }}">
-                        </div>
-                        <div class="mb-3">
-                            <label class="form-label fw-semibold">Monto Próximo Pago</label>
-                            <input type="text" class="form-control currency-input text-warning-emphasis" name="next_payment_amount" value="{{ c.next_payment_amount }}">
-                        </div>
-                        <div class="row g-2 mb-3">
-                            <div class="col-6">
-                                <label class="form-label fw-semibold">Día Corte (1-31)</label>
-                                <input type="number" class="form-control" name="statement_day" min="1" max="31" value="{{ c.statement_day }}" required>
-                            </div>
-                            <div class="col-6">
-                                <label class="form-label fw-semibold">Día Pago (1-31)</label>
-                                <input type="number" class="form-control" name="due_day" min="1" max="31" value="{{ c.due_day }}" required>
-                            </div>
-                        </div>
-                        <div class="mb-3">
-                            <label class="form-label fw-semibold">Fecha de Actualización</label>
-                            <input type="date" class="form-control" name="recorded_at" value="{{ today }}" required>
-                        </div>
-                        <div class="mb-3">
-                            <label class="form-label fw-semibold">Nota</label>
-                            <input type="text" class="form-control" name="note" value="Actualización">
-                        </div>
-                    </div>
-                    <div class="modal-footer">
-                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
-                        <button type="submit" class="btn btn-primary fw-semibold">Guardar Cambios</button>
-                    </div>
-                </form>
+    <dl class="kv">
+        <div><dt>Cupo total</dt><dd>{{ c.credit_limit | format_currency }}</dd></div>
+        <div><dt>Disponible</dt><dd>{{ (c.credit_limit - c.current_debt) | format_currency }}</dd></div>
+        <div><dt>Próximo pago</dt><dd>{{ c.next_payment_amount | format_currency }}</dd></div>
+        <div><dt>Corte / pago</dt><dd>Día {{ c.statement_day }} / día {{ c.due_day }}</dd></div>
+    </dl>
+
+    <form action="{{ url_for('add_card_history_record', id=c.id) }}" method="POST" class="form-section">
+        <span class="form-section-label">Registrar nueva deuda</span>
+        <div class="group">
+            <label class="row"><span class="row-label">Deuda total</span><input type="text" class="currency-input" name="current_debt" value="{{ c.current_debt }}" required></label>
+            <label class="row"><span class="row-label">Próximo pago</span><input type="text" class="currency-input" name="next_payment_amount" value="{{ c.next_payment_amount }}"></label>
+            <label class="row"><span class="row-label">Fecha</span><input type="date" name="recorded_at" value="{{ today }}" required></label>
+            <div class="row stacked">
+                <label class="sr-only" for="cd-note-{{ c.id }}">Nota</label>
+                <input type="text" id="cd-note-{{ c.id }}" name="note" placeholder="Nota (ej. extracto de octubre)" maxlength="120">
             </div>
         </div>
+        <button type="submit" class="btn btn-primary btn-block mt-l">Guardar deuda</button>
+    </form>
+
+    <div class="form-section">
+        <span class="form-section-label">Historial · {{ hist | length }} {{ 'registro' if hist | length == 1 else 'registros' }}</span>
+        {% if hist %}
+        <ul class="list history">
+            {% for h in hist | reverse %}
+            {% set idx = hist | length - loop.index %}
+            {% set prev = hist[idx - 1] if idx > 0 else none %}
+            <li class="list-item">
+                <div class="body">
+                    <div class="title num">{{ h.current_debt | format_currency }}</div>
+                    <div class="meta">{{ h.recorded_at | fecha_corta }}{% if h.next_payment_amount %} · pago {{ h.next_payment_amount | format_currency }}{% endif %}{% if h.note %} · {{ h.note }}{% endif %}</div>
+                </div>
+                {% if prev %}
+                {% set d = h.current_debt - prev.current_debt %}
+                {# Para una deuda, bajar es bueno #}
+                <div class="amount {{ 'positive' if d < 0 else ('negative' if d > 0) }}" style="font-size: 0.8125rem">
+                    {% if d != 0 %}<i class="bi {{ 'bi-arrow-up-right' if d > 0 else 'bi-arrow-down-right' }}"></i> {{ '+' if d > 0 }}{{ d | format_currency }}{% else %}<span class="muted">Sin cambio</span>{% endif %}
+                </div>
+                {% endif %}
+                <form action="{{ url_for('delete_card_history_record', history_id=h.id) }}" method="POST" class="actions"
+                      data-confirm="¿Eliminar este registro?" data-confirm-detail="Deuda de {{ h.current_debt | format_currency }} del {{ h.recorded_at | fecha_corta }}.">
+                    <button type="submit" class="icon-btn danger" aria-label="Eliminar registro del {{ h.recorded_at | fecha_corta }}"><i class="bi bi-trash3"></i></button>
+                </form>
+            </li>
+            {% endfor %}
+        </ul>
+        {% else %}
+        <p class="form-note">Aún no hay registros para esta tarjeta.</p>
+        {% endif %}
     </div>
 
-    <!-- Modal Ver Historial de la Tarjeta -->
-    <div class="modal fade" id="historyCardModal{{ c.id }}" tabindex="-1" aria-hidden="true">
-        <div class="modal-dialog modal-lg">
-            <div class="modal-content">
-                <div class="modal-header bg-light">
-                    <h5 class="modal-title fw-bold"><i class="bi bi-clock-history me-2 text-warning-emphasis"></i>Historial de Deuda: {{ c.name }}</h5>
-                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-                </div>
-                <div class="modal-body p-0">
-                    <div class="table-responsive">
-                        <table class="table table-striped table-hover mb-0 align-middle">
-                            <thead class="table-light">
-                                <tr>
-                                    <th>Fecha</th>
-                                    <th class="text-end">Deuda Registrada</th>
-                                    <th class="text-end">Próximo Pago</th>
-                                    <th>Nota / Detalle</th>
-                                    <th class="text-end pe-3">Acción</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                {% if c.debt_history %}
-                                    {% for h in c.debt_history %}
-                                        <tr>
-                                            <td><span class="badge bg-light text-dark border">{{ h.recorded_at }}</span></td>
-                                            <td class="text-end fw-bold text-danger">{{ h.current_debt | format_currency }}</td>
-                                            <td class="text-end text-warning-emphasis fw-semibold">
-                                                {% if h.next_payment_amount %}{{ h.next_payment_amount | format_currency }}{% else %}-{% endif %}
-                                            </td>
-                                            <td class="text-muted small">{{ h.note or '-' }}</td>
-                                            <td class="text-end pe-3">
-                                                <form action="{{ url_for('delete_card_history_record', history_id=h.id) }}" method="POST" class="d-inline" onsubmit="return confirm('¿Eliminar este registro histórico?');">
-                                                    <button type="submit" class="btn btn-sm btn-outline-danger py-0 px-2" title="Eliminar registro">
-                                                        <i class="bi bi-x-lg"></i>
-                                                    </button>
-                                                </form>
-                                            </td>
-                                        </tr>
-                                    {% endfor %}
-                                {% else %}
-                                    <tr>
-                                        <td colspan="5" class="text-center py-4 text-muted">No hay registros históricos para esta tarjeta.</td>
-                                    </tr>
-                                {% endif %}
-                            </tbody>
-                        </table>
-                    </div>
-                </div>
-                <div class="modal-footer">
-                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cerrar</button>
-                </div>
+    <div class="danger-zone">
+        <button type="button" class="btn btn-secondary" data-sheet-open="card-edit-{{ c.id }}"><i class="bi bi-pencil"></i> Editar</button>
+        <form action="{{ url_for('delete_card', id=c.id) }}" method="POST"
+              data-confirm="¿Eliminar «{{ c.name }}»?" data-confirm-detail="Se borrará la tarjeta y todo su historial de deuda.">
+            <button type="submit" class="btn btn-danger"><i class="bi bi-trash3"></i> Eliminar</button>
+        </form>
+    </div>
+</div>
+{% endcall %}
+
+{% call sheet('card-edit-' ~ c.id, 'Editar tarjeta') %}
+<form action="{{ url_for('edit_card', id=c.id) }}" method="POST">
+    <div class="sheet-body">
+        <div class="form-section">
+            <div class="group">
+                <label class="row"><span class="row-label">Nombre</span><input type="text" name="name" value="{{ c.name }}" required maxlength="80"></label>
             </div>
         </div>
+        <div class="form-section">
+            <span class="form-section-label">Montos</span>
+            <div class="group">
+                <label class="row"><span class="row-label">Cupo total</span><input type="text" class="currency-input" name="credit_limit" value="{{ c.credit_limit }}"></label>
+                <label class="row"><span class="row-label">Deuda actual</span><input type="text" class="currency-input" name="current_debt" value="{{ c.current_debt }}"></label>
+                <label class="row"><span class="row-label">Próximo pago</span><input type="text" class="currency-input" name="next_payment_amount" value="{{ c.next_payment_amount }}"></label>
+            </div>
+        </div>
+        <div class="form-section">
+            <span class="form-section-label">Ciclo de facturación</span>
+            <div class="group">
+                <label class="row"><span class="row-label">Día de corte</span><input type="number" name="statement_day" min="1" max="31" value="{{ c.statement_day }}" required></label>
+                <label class="row"><span class="row-label">Día de pago</span><input type="number" name="due_day" min="1" max="31" value="{{ c.due_day }}" required></label>
+            </div>
+        </div>
+        <div class="form-section">
+            <div class="group">
+                <label class="row"><span class="row-label">Fecha</span><input type="date" name="recorded_at" value="{{ today }}" required></label>
+                <label class="row"><span class="row-label">Nota</span><input type="text" name="note" value="Actualización" maxlength="120"></label>
+            </div>
+            <p class="form-note">Guardar también añade un registro al historial con esta deuda y fecha.</p>
+        </div>
     </div>
+    <div class="sheet-footer"><button type="submit" class="btn btn-primary btn-lg btn-block">Guardar cambios</button></div>
+</form>
+{% endcall %}
 {% endfor %}
 
 {% endblock %}

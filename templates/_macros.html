@@ -1,0 +1,27 @@
+{#
+  Componentes reutilizables.
+  sheet(): hoja modal. El contenido (caller) aporta .sheet-body y, opcionalmente, .sheet-footer,
+  normalmente envueltos en un <form>.
+#}
+{% macro sheet(id, title, close_label='Cancelar', wide=False) %}
+<div class="sheet{% if wide %} wide{% endif %}" id="{{ id }}" role="dialog" aria-modal="true" aria-labelledby="{{ id }}-title">
+    <div class="sheet-scrim" data-sheet-close></div>
+    <div class="sheet-panel" tabindex="-1">
+        <span class="sheet-grabber" aria-hidden="true"></span>
+        <header class="sheet-header">
+            <div class="start">
+                <button type="button" class="btn btn-plain" data-sheet-close>{{ close_label }}</button>
+            </div>
+            <h2 id="{{ id }}-title">{{ title }}</h2>
+            <div class="end"></div>
+        </header>
+        {{ caller() }}
+    </div>
+</div>
+{% endmacro %}
+
+{# Monto con los centavos en tamaño menor: $ 1 234 567<small>,89</small> #}
+{% macro money(value) -%}
+{%- set p = (value | format_currency).split(',') -%}
+{{ p[0] }}<span class="cents">,{{ p[1] }}</span>
+{%- endmacro %}

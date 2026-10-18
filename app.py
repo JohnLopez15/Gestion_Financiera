@@ -1,7 +1,5 @@
 import os
-import json
 import datetime
-import pandas as pd
 
 from flask import Flask, render_template, request, redirect, url_for, flash, jsonify
 from flask_login import (
@@ -9,9 +7,6 @@ from flask_login import (
     login_required, current_user
 )
 from werkzeug.security import generate_password_hash, check_password_hash
-import plotly.express as px
-import plotly.graph_objects as go
-import plotly.utils
 from dotenv import load_dotenv
 
 from database.connection import engine, Base, SessionLocal
@@ -90,10 +85,69 @@ def format_currency_filter(value):
         val = float(value)
     except (ValueError, TypeError):
         return "$ 0,00"
-    parts = f"{val:,.2f}".split('.')
+    sign = "−" if val < 0 else ""
+    parts = f"{abs(val):,.2f}".split('.')
     integer_part = parts[0].replace(',', ' ')
     decimal_part = parts[1]
-    return f"$ {integer_part},{decimal_part}"
+    return f"{sign}$ {integer_part},{decimal_part}"
+
+
+# ──────────────────────────────────────────────
+# FILTROS JINJA2: Fechas en español
+# ──────────────────────────────────────────────
+MESES_CORTOS = ["ene", "feb", "mar", "abr", "may", "jun", "jul", "ago", "sep", "oct", "nov", "dic"]
+MESES_LARGOS = ["enero", "febrero", "marzo", "abril", "mayo", "junio", "julio",
+                "agosto", "septiembre", "octubre", "noviembre", "diciembre"]
+DIAS_SEMANA = ["lunes", "martes", "miércoles", "jueves", "viernes", "sábado", "domingo"]
+
+
+@app.template_filter('fecha_corta')
+def fecha_corta_filter(d):
+    """2026-10-18 → '18 oct' (añade el año si no es el actual)."""
+    if not d:
+        return "—"
+    text = f"{d.day} {MESES_CORTOS[d.month - 1]}"
+    if d.year != datetime.date.today().year:
+        text += f" {d.year}"
+    return text
+
+
+@app.template_filter('fecha_relativa')
+def fecha_relativa_filter(d):
+    """'Hoy', 'Mañana' o 'jueves, 22 de octubre'."""
+    if not d:
+        return "—"
+    delta = (d - datetime.date.today()).days
+    if delta == 0:
+        return "Hoy"
+    if delta == 1:
+        return "Mañana"
+    return f"{DIAS_SEMANA[d.weekday()].capitalize()}, {d.day} de {MESES_LARGOS[d.month - 1]}"
+
+
+@app.context_processor
+def inject_quick_add():
+    """Datos para la hoja global de 'Nuevo movimiento' disponible en todas las vistas."""
+    if not current_user.is_authenticated:
+        return {}
+    db = SessionLocal()
+    try:
+        cards = [{"id": c.id, "name": c.name} for c in db.query(CreditCard).all()]
+    finally:
+        db.close()
+    today = datetime.date.today()
+    return {
+        "qa_cards": cards,
+        "qa_today": today.isoformat(),
+        "today_label": f"{DIAS_SEMANA[today.weekday()].capitalize()}, {today.day} de {MESES_LARGOS[today.month - 1]}",
+    }
+
+
+def safe_next(target, fallback):
+    """Solo permite redirecciones internas relativas."""
+    if target and target.startswith('/') and not target.startswith('//'):
+        return target
+    return fallback
 
 
 # ──────────────────────────────────────────────
@@ -142,7 +196,7 @@ def login():
             login_user(user, remember=True)
             next_page = request.args.get('next')
             flash(f"Bienvenido, {user.username}.", "success")
-            return redirect(next_page or url_for('index'))
+            return redirect(safe_next(next_page, url_for('index')))
         else:
             flash("Usuario o contraseña incorrectos. Intenta de nuevo.", "danger")
 
@@ -165,94 +219,124 @@ def logout():
 @login_required
 def index():
     months = request.args.get('months', default=12, type=int)
+    if months not in (1, 3, 6, 12, 24):
+        months = 12
     db = SessionLocal()
     try:
         # 1. Proyección predictiva futura
         df_proj, events = generate_cashflow_projection(db, months_ahead=months)
         accounts = db.query(Account).all()
         cards = db.query(CreditCard).all()
+        today = datetime.date.today()
 
         initial_balance = sum(acc.balance for acc in accounts)
         total_cc_debt = sum(c.current_debt for c in cards)
-        min_balance = df_proj['balance'].min() if not df_proj.empty else 0.0
+        total_cc_limit = sum(c.credit_limit for c in cards)
+        net_worth = initial_balance - total_cc_debt
 
-        # Gráfico predictivo
-        fig_proj = px.line(
-            df_proj, x='date', y='balance',
-            title="Evolución Diaria del Saldo Proyectado (Predictivo)",
-            labels={'date': 'Fecha', 'balance': 'Saldo ($)'}
-        )
-        fig_proj.add_hline(y=0, line_dash="dash", line_color="red", annotation_text="Límite Liquidez (0)")
-        fig_proj.update_layout(
-            template="plotly_white",
-            margin=dict(l=20, r=20, t=40, b=20),
-            hovermode="x unified"
-        )
-        chart_proj_json = json.dumps(fig_proj, cls=plotly.utils.PlotlyJSONEncoder)
+        min_idx = df_proj['balance'].idxmin()
+        min_balance = float(df_proj.loc[min_idx, 'balance'])
+        min_date = df_proj.loc[min_idx, 'date']
+        end_balance = float(df_proj['balance'].iloc[-1])
+        end_date = df_proj['date'].iloc[-1]
 
-        # 2. Análisis Histórico Real (Día a Día registrado)
-        acc_history = db.query(AccountBalanceHistory).order_by(AccountBalanceHistory.recorded_at.asc()).all()
-        card_history = db.query(CreditCardDebtHistory).order_by(CreditCardDebtHistory.recorded_at.asc()).all()
+        # Primer día en que el saldo proyectado cae bajo cero (si ocurre)
+        negative = df_proj[df_proj['balance'] < 0]
+        first_negative_date = negative['date'].iloc[0] if not negative.empty else None
 
-        has_history = len(acc_history) > 0 or len(card_history) > 0
-        chart_real_json = None
+        projection = {
+            "dates": [d.isoformat() for d in df_proj['date']],
+            "balance": [round(float(b), 2) for b in df_proj['balance']],
+            "min": {"date": min_date.isoformat(), "value": round(min_balance, 2)},
+        }
 
-        if has_history:
-            fig_real = go.Figure()
+        # 2. Flujo mensual (ingresos vs. egresos) dentro del horizonte
+        monthly = {}
+        for ev in events:
+            if not (today <= ev['date'] <= end_date):
+                continue
+            key = (ev['date'].year, ev['date'].month)
+            bucket = monthly.setdefault(key, {"income": 0.0, "expense": 0.0})
+            if ev['amount'] >= 0:
+                bucket["income"] += ev['amount']
+            else:
+                bucket["expense"] += ev['amount']
+        month_keys = []
+        cursor = datetime.date(today.year, today.month, 1)
+        while cursor <= end_date:
+            month_keys.append((cursor.year, cursor.month))
+            cursor = (cursor.replace(day=28) + datetime.timedelta(days=4)).replace(day=1)
+        monthly_flow = {
+            "labels": [
+                MESES_CORTOS[m - 1] + (f" {str(y)[2:]}" if y != today.year else "")
+                for y, m in month_keys
+            ],
+            "income": [round(monthly.get(k, {}).get("income", 0.0), 2) for k in month_keys],
+            "expense": [round(monthly.get(k, {}).get("expense", 0.0), 2) for k in month_keys],
+        }
 
-            # Agregar trazas por cada cuenta
-            for acc in accounts:
-                history_for_acc = [h for h in acc_history if h.account_id == acc.id]
-                if history_for_acc:
-                    dates = [h.recorded_at for h in history_for_acc]
-                    balances = [h.balance for h in history_for_acc]
-                    fig_real.add_trace(go.Scatter(
-                        x=dates, y=balances,
-                        mode='lines+markers',
-                        name=f"Cuenta: {acc.name}",
-                        line=dict(width=2)
-                    ))
+        # 3. Histórico real registrado (snapshots por producto)
+        history = {
+            "accounts": [
+                {
+                    "name": acc.name,
+                    "dates": [h.recorded_at.isoformat() for h in acc.balance_history],
+                    "values": [round(h.balance, 2) for h in acc.balance_history],
+                }
+                for acc in accounts if acc.balance_history
+            ],
+            "cards": [
+                {
+                    "name": c.name,
+                    "dates": [h.recorded_at.isoformat() for h in c.debt_history],
+                    "values": [round(h.current_debt, 2) for h in c.debt_history],
+                }
+                for c in cards if c.debt_history
+            ],
+        }
+        has_history = bool(history["accounts"] or history["cards"])
 
-            # Agregar trazas por cada tarjeta de crédito (Deuda)
-            for c in cards:
-                history_for_card = [h for h in card_history if h.credit_card_id == c.id]
-                if history_for_card:
-                    dates = [h.recorded_at for h in history_for_card]
-                    debts = [h.current_debt for h in history_for_card]
-                    fig_real.add_trace(go.Scatter(
-                        x=dates, y=debts,
-                        mode='lines+markers',
-                        name=f"Deuda TC: {c.name}",
-                        line=dict(dash='dot', width=2)
-                    ))
-
-            fig_real.update_layout(
-                title="Evolución Histórica Real Registrada (Día a Día)",
-                xaxis_title="Fecha de Registro",
-                yaxis_title="Monto ($)",
-                template="plotly_white",
-                margin=dict(l=20, r=20, t=40, b=20),
-                hovermode="x unified"
-            )
-            chart_real_json = json.dumps(fig_real, cls=plotly.utils.PlotlyJSONEncoder)
-
-        # Próximos eventos (30 días)
-        today = datetime.date.today()
+        # 4. Próximos eventos (30 días) agrupados por día, con el saldo proyectado resultante
+        balance_by_date = dict(zip(df_proj['date'], df_proj['balance']))
         next_30 = today + datetime.timedelta(days=30)
-        next_events = [ev for ev in events if today <= ev['date'] <= next_30]
-        next_events.sort(key=lambda x: x['date'])
+        next_events = sorted(
+            (ev for ev in events if today <= ev['date'] <= next_30),
+            key=lambda x: (x['date'], -x['amount'])
+        )
+        upcoming = []
+        for ev in next_events:
+            if not upcoming or upcoming[-1]["date"] != ev['date']:
+                upcoming.append({
+                    "date": ev['date'],
+                    "items": [],
+                    "balance_after": float(balance_by_date.get(ev['date'], 0.0)),
+                })
+            upcoming[-1]["items"].append(ev)
+        upcoming_in = sum(ev['amount'] for ev in next_events if ev['amount'] > 0)
+        upcoming_out = sum(ev['amount'] for ev in next_events if ev['amount'] < 0)
 
         return render_template(
             'dashboard.html',
             active_page='dashboard',
             months=months,
             initial_balance=initial_balance,
-            min_balance=min_balance,
             total_cc_debt=total_cc_debt,
-            chart_json=chart_proj_json,
-            chart_real_json=chart_real_json,
+            total_cc_limit=total_cc_limit,
+            net_worth=net_worth,
+            min_balance=min_balance,
+            min_date=min_date,
+            end_balance=end_balance,
+            end_date=end_date,
+            first_negative_date=first_negative_date,
+            accounts_count=len(accounts),
+            cards_count=len(cards),
+            projection=projection,
+            monthly_flow=monthly_flow,
+            history=history,
             has_history=has_history,
-            next_events=next_events
+            upcoming=upcoming,
+            upcoming_in=upcoming_in,
+            upcoming_out=upcoming_out,
         )
     finally:
         db.close()
@@ -583,14 +667,30 @@ def movements_view():
     db = SessionLocal()
     try:
         transactions = db.query(Transaction).order_by(Transaction.start_date.desc()).all()
-        cards = db.query(CreditCard).all()
-        today_str = datetime.date.today().isoformat()
+
+        # Equivalente mensual de los movimientos periódicos activos
+        factor = {
+            PeriodicityEnum.weekly: 52 / 12, PeriodicityEnum.biweekly: 26 / 12,
+            PeriodicityEnum.monthly: 1, PeriodicityEnum.bimonthly: 1 / 2,
+            PeriodicityEnum.semiannual: 1 / 6, PeriodicityEnum.annual: 1 / 12,
+        }
+        monthly_income = monthly_expense = 0.0
+        for t in transactions:
+            if t.is_active and t.is_recurring:
+                value = t.amount * factor.get(t.periodicity, 0)
+                if t.type == TransactionTypeEnum.income:
+                    monthly_income += value
+                else:
+                    monthly_expense += value
+
         return render_template(
             'movements.html',
             active_page='movements',
-            transactions=transactions,
-            cards=cards,
-            today=today_str
+            recurring=[t for t in transactions if t.is_recurring],
+            one_off=[t for t in transactions if not t.is_recurring],
+            total_count=len(transactions),
+            monthly_income=monthly_income,
+            monthly_expense=monthly_expense,
         )
     finally:
         db.close()
@@ -607,9 +707,11 @@ def add_movement():
     is_recurring = 'is_recurring' in request.form
     periodicity_str = request.form.get('periodicity', 'Mensual')
 
+    back = safe_next(request.form.get('next'), url_for('movements_view'))
+
     if not description or amount <= 0:
         flash("Debes ingresar una descripción y un monto válido mayor a 0.", "danger")
-        return redirect(url_for('movements_view'))
+        return redirect(back)
 
     try:
         start_date = datetime.date.fromisoformat(start_date_str) if start_date_str else datetime.date.today()
@@ -641,10 +743,10 @@ def add_movement():
             credit_card_id=credit_card_id
         ))
         db.commit()
-        flash("Movimiento registrado con éxito.", "success")
+        flash(f"Movimiento '{description}' registrado.", "success")
     finally:
         db.close()
-    return redirect(url_for('movements_view'))
+    return redirect(back)
 
 
 @app.route('/movements/<int:id>/toggle', methods=['POST'])

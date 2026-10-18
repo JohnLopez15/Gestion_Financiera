@@ -1,240 +1,332 @@
 {% extends 'base.html' %}
+{% from '_macros.html' import money %}
 
-{% block title %}Dashboard - Proyección y Evolución Real{% endblock %}
+{% block title %}Resumen · Gestión Financiera{% endblock %}
 
 {% block content %}
-<div class="row mb-4 align-items-center">
-    <div class="col-md-6">
-        <h2 class="fw-bold mb-0">Dashboard de Flujo de Caja</h2>
-        <p class="text-muted mb-0">Monitoreo de liquidez consolidada, análisis histórico real y proyección predictiva.</p>
+{% set at_risk = min_balance < 0 %}
+{% set horizons = [(1, '1M'), (3, '3M'), (6, '6M'), (12, '1A'), (24, '2A')] %}
+{% set horizon_label = {1: 'el próximo mes', 3: 'los próximos 3 meses', 6: 'los próximos 6 meses', 12: 'los próximos 12 meses', 24: 'los próximos 2 años'}[months] %}
+
+<header class="page-header">
+    <div>
+        <span class="eyebrow">{{ today_label }}</span>
+        <h1 class="page-title">Resumen</h1>
     </div>
-    <div class="col-md-6 d-flex justify-content-md-end align-items-center gap-3 mt-3 mt-md-0">
-        <label for="monthsSelect" class="form-label mb-0 fw-semibold">Horizonte Predictivo:</label>
-        <select id="monthsSelect" class="form-select w-auto" onchange="window.location.href='/?months=' + this.value">
-            <option value="1" {% if months == 1 %}selected{% endif %}>1 Mes</option>
-            <option value="3" {% if months == 3 %}selected{% endif %}>3 Meses</option>
-            <option value="6" {% if months == 6 %}selected{% endif %}>6 Meses</option>
-            <option value="12" {% if months == 12 %}selected{% endif %}>12 Meses (1 Año)</option>
-            <option value="24" {% if months == 24 %}selected{% endif %}>24 Meses (2 Años)</option>
-        </select>
+    {% if at_risk %}
+        <span class="status risk"><i class="bi bi-exclamation-triangle-fill"></i> Riesgo de liquidez</span>
+    {% else %}
+        <span class="status ok"><i class="bi bi-check-circle-fill"></i> Flujo de caja sano</span>
+    {% endif %}
+</header>
+
+<!-- Cifra principal: patrimonio neto -->
+<section class="card hero" aria-labelledby="hero-label">
+    <div>
+        <span class="hero-label" id="hero-label">Patrimonio neto</span>
+        <div class="hero-value">{{ money(net_worth) }}</div>
+        <div class="hero-breakdown">
+            <span><i class="dot" style="background: var(--positive)"></i>En cuentas <strong class="num">{{ initial_balance | format_currency }}</strong></span>
+            <span><i class="dot" style="background: var(--negative)"></i>Deuda en tarjetas <strong class="num">{{ total_cc_debt | format_currency }}</strong></span>
+        </div>
+    </div>
+    <div class="page-actions">
+        <a class="btn btn-secondary" href="{{ url_for('products_view') }}"><i class="bi bi-arrow-repeat"></i> Actualizar saldos</a>
+    </div>
+</section>
+
+{% if at_risk %}
+<div class="callout risk mt-l" role="alert">
+    <i class="bi bi-exclamation-triangle-fill"></i>
+    <div>
+        <strong>Tu saldo quedaría en negativo desde el {{ first_negative_date | fecha_corta }}.</strong>
+        Llegaría a un mínimo de {{ min_balance | format_currency }} el {{ min_date | fecha_corta }}.
+        <a href="{{ url_for('movements_view') }}">Revisa tus gastos programados</a> o adelanta un ingreso.
     </div>
 </div>
+{% endif %}
 
-<!-- Tarjetas de Resumen Rápido -->
-<div class="row g-3 mb-4">
-    <div class="col-md-4">
-        <div class="card stat-card success h-100">
-            <div class="card-body">
-                <div class="d-flex justify-content-between align-items-center">
-                    <div>
-                        <span class="text-muted text-uppercase fw-semibold small">Saldo Actual Total</span>
-                        <h3 class="fw-bold mt-2 mb-0">{{ initial_balance | format_currency }}</h3>
-                    </div>
-                    <div class="bg-success-subtle p-3 rounded-circle text-success">
-                        <i class="bi bi-bank fs-3"></i>
-                    </div>
-                </div>
-            </div>
-        </div>
+<!-- Métricas clave -->
+<section class="stat-grid" aria-label="Indicadores">
+    <div class="card stat">
+        <span class="stat-label"><i class="bi bi-arrow-down-circle"></i> Saldo mínimo proyectado</span>
+        <span class="stat-value {% if at_risk %}negative{% endif %}">{{ min_balance | format_currency }}</span>
+        <span class="stat-foot">El {{ min_date | fecha_corta }}, en {{ horizon_label }}</span>
     </div>
-    <div class="col-md-4">
-        <div class="card stat-card {% if min_balance < 0 %}danger{% else %}primary{% endif %} h-100">
-            <div class="card-body">
-                <div class="d-flex justify-content-between align-items-center">
-                    <div>
-                        <span class="text-muted text-uppercase fw-semibold small">Saldo Mínimo Proyectado</span>
-                        <h3 class="fw-bold mt-2 mb-0 {% if min_balance < 0 %}text-danger{% else %}text-primary{% endif %}">
-                            {{ min_balance | format_currency }}
-                        </h3>
-                    </div>
-                    <div class="{% if min_balance < 0 %}bg-danger-subtle text-danger{% else %}bg-primary-subtle text-primary{% endif %} p-3 rounded-circle">
-                        <i class="bi bi-shield-exclamation fs-3"></i>
-                    </div>
-                </div>
-            </div>
-        </div>
+    <div class="card stat">
+        {% set delta = end_balance - initial_balance %}
+        <span class="stat-label"><i class="bi bi-flag"></i> Saldo al final del periodo</span>
+        <span class="stat-value">{{ end_balance | format_currency }}</span>
+        <span class="stat-foot">
+            <span class="{{ 'positive' if delta >= 0 else 'negative' }}"><i class="bi {{ 'bi-arrow-up-right' if delta >= 0 else 'bi-arrow-down-right' }}"></i> {{ '+' if delta >= 0 }}{{ delta | format_currency }}</span>
+            frente a hoy · {{ end_date | fecha_corta }}
+        </span>
     </div>
-    <div class="col-md-4">
-        <div class="card stat-card h-100">
-            <div class="card-body">
-                <div class="d-flex justify-content-between align-items-center">
-                    <div>
-                        <span class="text-muted text-uppercase fw-semibold small">Deuda Total Tarjetas</span>
-                        <h3 class="fw-bold mt-2 mb-0 text-warning">{{ total_cc_debt | format_currency }}</h3>
-                    </div>
-                    <div class="bg-warning-subtle p-3 rounded-circle text-warning">
-                        <i class="bi bi-credit-card-2-front fs-3"></i>
-                    </div>
-                </div>
-            </div>
-        </div>
+    <div class="card stat">
+        {% set net_30 = upcoming_in + upcoming_out %}
+        <span class="stat-label"><i class="bi bi-calendar-week"></i> Próximos 30 días</span>
+        <span class="stat-value">{{ '+' if net_30 > 0 }}{{ net_30 | format_currency }}</span>
+        <span class="stat-foot">Entran {{ upcoming_in | format_currency }} · salen {{ (-upcoming_out) | format_currency }}</span>
     </div>
-</div>
+</section>
 
-<!-- Banner de Alerta de Iliquidez -->
-<div class="row mb-4">
-    <div class="col-12">
-        {% if min_balance < 0 %}
-            <div class="card alert-liquidity-danger p-3 shadow-sm">
-                <div class="d-flex align-items-center gap-3">
-                    <i class="bi bi-exclamation-triangle-fill fs-2 text-danger"></i>
-                    <div>
-                        <h5 class="fw-bold mb-1">¡Alerta de Riesgo de Iliquidez!</h5>
-                        <p class="mb-0">Se proyecta que tu saldo consolidado caerá por debajo de cero, alcanzando un mínimo de <strong>{{ min_balance | format_currency }}</strong> en el horizonte de {{ months }} meses. Revisa tus gastos programados y pagos de tarjeta.</p>
-                    </div>
-                </div>
+<!-- Proyección -->
+<section class="card mt-l" aria-labelledby="proj-title">
+    <div class="card-header">
+        <div>
+            <h2 class="card-title" id="proj-title">Saldo proyectado</h2>
+            <p class="card-subtitle">Saldo consolidado de tus cuentas, día a día, según movimientos y pagos de tarjeta programados</p>
+        </div>
+        <nav class="segmented" aria-label="Horizonte de proyección">
+            {% for m, label in horizons %}
+            <a href="{{ url_for('index', months=m) }}" aria-current="{{ 'true' if months == m else 'false' }}" title="{{ m }} {{ 'mes' if m == 1 else 'meses' }}">{{ label }}</a>
+            {% endfor %}
+        </nav>
+    </div>
+    <dl class="chart-summary">
+        <div><dt>Hoy</dt><dd class="num">{{ initial_balance | format_currency }}</dd></div>
+        <div><dt>Mínimo</dt><dd class="num {% if at_risk %}negative{% endif %}">{{ min_balance | format_currency }}</dd></div>
+        <div><dt>Final</dt><dd class="num">{{ end_balance | format_currency }}</dd></div>
+    </dl>
+    <div id="chart-projection" class="chart" role="img" aria-label="Gráfica del saldo proyectado para {{ horizon_label }}. Mínimo {{ min_balance | format_currency }} el {{ min_date | fecha_corta }}."></div>
+</section>
+
+<div class="grid grid-dash mt-l">
+    <!-- Flujo mensual -->
+    <section class="card" aria-labelledby="flow-title">
+        <div class="card-header">
+            <div>
+                <h2 class="card-title" id="flow-title">Flujo por mes</h2>
+                <p class="card-subtitle">Lo que entra y sale de tus cuentas cada mes</p>
             </div>
+            <div class="chart-legend" aria-hidden="true">
+                <span><i class="key sq" style="background: var(--flow-in)"></i>Ingresos</span>
+                <span><i class="key sq" style="background: var(--flow-out)"></i>Egresos</span>
+                <span><i class="key" style="background: var(--ink-2)"></i>Neto</span>
+            </div>
+        </div>
+        {% if monthly_flow.income | sum > 0 or monthly_flow.expense | sum < 0 %}
+            <div id="chart-flow" class="chart sm" role="img" aria-label="Barras de ingresos y egresos por mes"></div>
         {% else %}
-            <div class="card alert-liquidity-success p-3 shadow-sm">
-                <div class="d-flex align-items-center gap-3">
-                    <i class="bi bi-check-circle-fill fs-2 text-success"></i>
-                    <div>
-                        <h5 class="fw-bold mb-1">Flujo de Caja Saludable</h5>
-                        <p class="mb-0">No se detectan quiebres de liquidez para los próximos {{ months }} meses. Tu saldo proyectado se mantiene positivo en todo el periodo.</p>
-                    </div>
-                </div>
+            <div class="empty">
+                <i class="bi bi-bar-chart"></i>
+                <h3>Sin movimientos programados</h3>
+                <p>Registra tus ingresos y gastos recurrentes para ver cómo se mueve tu dinero mes a mes.</p>
+                <button type="button" class="btn btn-tinted" data-sheet-open="sheet-new-movement"><i class="bi bi-plus-lg"></i> Nuevo movimiento</button>
             </div>
         {% endif %}
-    </div>
-</div>
+    </section>
 
-<!-- SECCIÓN DE GRÁFICOS (Tabs: Proyección Futura vs Evolución Real) -->
-<div class="row mb-4">
-    <div class="col-12">
-        <div class="card shadow-sm">
-            <div class="card-header bg-white d-flex justify-content-between align-items-center flex-wrap gap-2">
-                <ul class="nav nav-tabs card-header-tabs" id="chartTabs" role="tablist">
-                    <li class="nav-item" role="presentation">
-                        <button class="nav-link active fw-bold" id="projection-tab" data-bs-toggle="tab" data-bs-target="#projection-pane" type="button" role="tab">
-                            <i class="bi bi-graph-up-arrow me-2 text-primary"></i>Proyección Predictiva (Futuro)
-                        </button>
-                    </li>
-                    <li class="nav-item" role="presentation">
-                        <button class="nav-link fw-bold" id="real-history-tab" data-bs-toggle="tab" data-bs-target="#real-history-pane" type="button" role="tab">
-                            <i class="bi bi-calendar-range me-2 text-success"></i>Evolución Histórica Real (Día a Día)
-                        </button>
-                    </li>
-                </ul>
-                <a href="{{ url_for('products_view') }}" class="btn btn-sm btn-outline-primary">
-                    <i class="bi bi-plus-circle me-1"></i>Registrar Saldo / Deuda
-                </a>
+    <!-- Próximos 30 días -->
+    <section class="card" aria-labelledby="next-title">
+        <div class="card-header">
+            <div>
+                <h2 class="card-title" id="next-title">Próximos 30 días</h2>
+                <p class="card-subtitle">Con el saldo que te quedaría al cierre de cada día</p>
             </div>
-            <div class="card-body p-3">
-                <div class="tab-content" id="chartTabsContent">
-                    <!-- Tab 1: Gráfico Predictivo -->
-                    <div class="tab-pane fade show active" id="projection-pane" role="tabpanel">
-                        <div id="plotly-projection-chart" style="width:100%; height:450px;"></div>
-                    </div>
-
-                    <!-- Tab 2: Gráfico Histórico Real -->
-                    <div class="tab-pane fade" id="real-history-pane" role="tabpanel">
-                        {% if has_history and chart_real_json %}
-                            <div id="plotly-real-chart" style="width:100%; height:450px;"></div>
+        </div>
+        {% if upcoming %}
+            {% for day in upcoming %}
+            <div class="day-group">
+                <div class="day-head">
+                    <strong>{{ day.date | fecha_relativa }}</strong>
+                    <span class="{{ 'negative' if day.balance_after < 0 }}">Saldo {{ day.balance_after | format_currency }}</span>
+                </div>
+                <ul class="list">
+                    {% for ev in day['items'] %}
+                    <li class="list-item">
+                        {% if ev.category == 'INCOME' %}
+                            <span class="glyph in"><i class="bi bi-arrow-down-left"></i></span>
+                        {% elif ev.category == 'CC_PAYMENT' %}
+                            <span class="glyph card"><i class="bi bi-credit-card"></i></span>
                         {% else %}
-                            <div class="text-center py-5 text-muted">
-                                <i class="bi bi-clock-history fs-1 d-block mb-3 text-secondary"></i>
-                                <h5 class="fw-semibold">Aún no hay suficientes registros históricos</h5>
-                                <p class="mb-3">Cada vez que actualices el saldo de tus cuentas o la deuda de tus tarjetas en la sección <strong>Cuentas y Tarjetas</strong>, se graficará su avance real día a día aquí.</p>
-                                <a href="{{ url_for('products_view') }}" class="btn btn-primary">
-                                    <i class="bi bi-pencil-square me-1"></i>Registrar Primer Saldo
-                                </a>
-                            </div>
+                            <span class="glyph out"><i class="bi bi-arrow-up-right"></i></span>
                         {% endif %}
-                    </div>
-                </div>
+                        <div class="body">
+                            <div class="title">{{ ev.description }}</div>
+                            <div class="meta">{{ {'INCOME': 'Ingreso', 'CC_PAYMENT': 'Pago de tarjeta', 'EXPENSE': 'Gasto'}[ev.category] }}</div>
+                        </div>
+                        <div class="amount {{ 'positive' if ev.amount > 0 }}">{{ '+' if ev.amount > 0 }}{{ ev.amount | format_currency }}</div>
+                    </li>
+                    {% endfor %}
+                </ul>
             </div>
-        </div>
-    </div>
+            {% endfor %}
+        {% else %}
+            <div class="empty">
+                <i class="bi bi-calendar-check"></i>
+                <h3>Nada programado</h3>
+                <p>No hay ingresos, gastos ni pagos de tarjeta en los próximos 30 días.</p>
+            </div>
+        {% endif %}
+    </section>
 </div>
 
-<!-- Próximos Eventos -->
-<div class="row">
-    <div class="col-12">
-        <div class="card shadow-sm">
-            <div class="card-header">
-                <span class="fw-bold"><i class="bi bi-calendar-event me-2"></i>Próximos Movimientos y Pagos de Tarjeta (Próximos 30 Días)</span>
-            </div>
-            <div class="card-body p-0">
-                <div class="table-responsive">
-                    <table class="table table-hover align-middle mb-0">
-                        <thead class="table-light">
-                            <tr>
-                                <th>Fecha</th>
-                                <th>Descripción</th>
-                                <th>Categoría</th>
-                                <th class="text-end">Monto Impacto</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {% if next_events %}
-                                {% for ev in next_events %}
-                                    <tr>
-                                        <td><span class="badge bg-light text-dark border">{{ ev.date }}</span></td>
-                                        <td class="fw-semibold">{{ ev.description }}</td>
-                                        <td>
-                                            {% if ev.category == 'INCOME' %}
-                                                <span class="badge badge-income">Ingreso</span>
-                                            {% elif ev.category == 'CC_PAYMENT' %}
-                                                <span class="badge bg-warning-subtle text-warning-emphasis border border-warning">Pago TC</span>
-                                            {% else %}
-                                                <span class="badge badge-expense">Gasto Cuenta</span>
-                                            {% endif %}
-                                        </td>
-                                        <td class="text-end fw-bold {% if ev.amount >= 0 %}text-success{% else %}text-danger{% endif %}">
-                                            {% if ev.amount >= 0 %}+{% endif %}{{ ev.amount | format_currency }}
-                                        </td>
-                                    </tr>
-                                {% endfor %}
-                            {% else %}
-                                <tr>
-                                    <td colspan="4" class="text-center py-4 text-muted">
-                                        <i class="bi bi-inbox fs-3 d-block mb-2"></i>
-                                        No hay movimientos programados para los próximos 30 días.
-                                    </td>
-                                </tr>
-                            {% endif %}
-                        </tbody>
-                    </table>
-                </div>
-            </div>
+<!-- Histórico real -->
+<section class="card mt-l" aria-labelledby="hist-title">
+    <div class="card-header">
+        <div>
+            <h2 class="card-title" id="hist-title">Histórico registrado</h2>
+            <p class="card-subtitle">Saldos y deudas reales que has ido anotando</p>
         </div>
+        {% if has_history %}
+        <div class="segmented" role="radiogroup" aria-label="Qué ver en el histórico" id="hist-switch">
+            <input type="radio" id="hist-acc" name="hist" value="accounts" {% if history.accounts %}checked{% endif %} {% if not history.accounts %}disabled{% endif %}>
+            <label for="hist-acc">Cuentas</label>
+            <input type="radio" id="hist-card" name="hist" value="cards" {% if not history.accounts %}checked{% endif %} {% if not history.cards %}disabled{% endif %}>
+            <label for="hist-card">Tarjetas</label>
+        </div>
+        {% endif %}
     </div>
-</div>
+    {% if has_history %}
+        <div class="chart-legend" id="hist-legend"></div>
+        <div id="chart-history" class="chart sm" role="img" aria-label="Histórico de saldos y deudas registrados"></div>
+        <p class="card-subtitle">El detalle de cada registro está en <a href="{{ url_for('products_view') }}">Cuentas y tarjetas</a>.</p>
+    {% else %}
+        <div class="empty">
+            <i class="bi bi-clock-history"></i>
+            <h3>Aún no hay registros</h3>
+            <p>Cada vez que actualices el saldo de una cuenta o la deuda de una tarjeta, verás aquí su evolución real.</p>
+            <a class="btn btn-tinted" href="{{ url_for('products_view') }}"><i class="bi bi-pencil"></i> Registrar un saldo</a>
+        </div>
+    {% endif %}
+</section>
 {% endblock %}
 
 {% block extra_scripts %}
 <script>
-    document.addEventListener("DOMContentLoaded", function() {
-        // Renderizar gráfico de proyección
-        const projData = {{ chart_json | safe }};
-        if (projData && projData.data) {
-            Plotly.newPlot('plotly-projection-chart', projData.data, projData.layout, {responsive: true, displayModeBar: false});
-        }
+(() => {
+    const projection = {{ projection | tojson }};
+    const flow = {{ monthly_flow | tojson }};
+    const history = {{ history | tojson }};
+    const fmt = FinCharts.formatCurrency;
+    const compact = FinCharts.formatCompact;
+    const alpha = (hex, a) => {
+        const n = parseInt(hex.replace('#', ''), 16);
+        return `rgba(${(n >> 16) & 255}, ${(n >> 8) & 255}, ${n & 255}, ${a})`;
+    };
 
-        // Renderizar gráfico histórico real
-        {% if chart_real_json %}
-            const realData = {{ chart_real_json | safe }};
-            if (realData && realData.data) {
-                Plotly.newPlot('plotly-real-chart', realData.data, realData.layout, {responsive: true, displayModeBar: false});
-            }
-        {% endif %}
+    // ── Proyección: una serie, área tenue, mínimo y último valor rotulados ──
+    FinCharts.register(t => {
+        const el = document.getElementById('chart-projection');
+        if (!el) return;
+        const ys = projection.balance;
+        const xs = projection.dates;
+        const minV = projection.min.value;
+        const lastX = xs[xs.length - 1], lastY = ys[ys.length - 1];
+        const showMin = projection.min.date !== xs[0] && projection.min.date !== lastX;
 
-        // Redimensionar gráficos al cambiar de tab
-        const realTab = document.getElementById('real-history-tab');
-        if (realTab) {
-            realTab.addEventListener('shown.bs.tab', function () {
-                const el = document.getElementById('plotly-real-chart');
-                if (el) Plotly.Plots.resize(el);
+        const traces = [{
+            x: xs, y: ys, type: 'scatter', mode: 'lines',
+            line: { color: t.series[0], width: 2, shape: 'hv' },
+            fill: 'tozeroy', fillcolor: alpha(t.series[0], 0.10),
+            customdata: ys.map(fmt),
+            hovertemplate: '<b>%{customdata}</b><extra></extra>',
+            name: 'Saldo',
+        }, {
+            x: [lastX].concat(showMin ? [projection.min.date] : []),
+            y: [lastY].concat(showMin ? [minV] : []),
+            type: 'scatter', mode: 'markers', hoverinfo: 'skip',
+            marker: { size: 9, color: t.series[0], line: { color: t.surface, width: 2 } },
+        }];
+
+        const annotations = [{
+            x: lastX, y: lastY, text: compact(lastY), showarrow: false,
+            xanchor: 'right', yanchor: 'bottom', yshift: 10, xshift: -6,
+            font: { size: 12, color: t.ink, family: t.font },
+            bgcolor: t.surface, borderpad: 2,
+        }];
+        if (showMin) {
+            annotations.push({
+                x: projection.min.date, y: minV, text: `Mínimo ${compact(minV)}`,
+                showarrow: false, yanchor: 'top', yshift: -10,
+                font: { size: 12, color: minV < 0 ? t.critical : t.ink2, family: t.font },
             });
         }
 
-        const projTab = document.getElementById('projection-tab');
-        if (projTab) {
-            projTab.addEventListener('shown.bs.tab', function () {
-                const el = document.getElementById('plotly-projection-chart');
-                if (el) Plotly.Plots.resize(el);
+        const shapes = [];
+        if (minV < 0) {
+            shapes.push({
+                type: 'line', xref: 'paper', x0: 0, x1: 1, y0: 0, y1: 0,
+                line: { color: t.critical, width: 1, dash: 'dot' },
+            });
+            annotations.push({
+                xref: 'paper', x: 0, y: 0, text: 'Sin liquidez', showarrow: false,
+                xanchor: 'left', yanchor: 'bottom', font: { size: 11, color: t.critical },
             });
         }
+
+        Plotly.react(el, traces, FinCharts.baseLayout(t, { annotations, shapes }), FinCharts.config);
     });
+
+    // ── Flujo mensual: ingresos arriba, egresos abajo, neto como punto ──
+    FinCharts.register(t => {
+        const el = document.getElementById('chart-flow');
+        if (!el) return;
+        const net = flow.income.map((v, i) => v + flow.expense[i]);
+        const bar = (y, color, name) => ({
+            x: flow.labels, y, type: 'bar', name,
+            marker: { color, cornerradius: 4, line: { width: 0 } },
+            customdata: y.map(fmt),
+            hovertemplate: `${name}: %{customdata}<extra></extra>`,
+        });
+        const traces = [
+            bar(flow.income, t.flowIn, 'Ingresos'),
+            bar(flow.expense, t.flowOut, 'Egresos'),
+            {
+                x: flow.labels, y: net, type: 'scatter', mode: 'lines+markers', name: 'Neto',
+                line: { color: t.ink2, width: 2 },
+                marker: { size: 8, color: t.ink2, line: { color: t.surface, width: 2 } },
+                customdata: net.map(fmt),
+                hovertemplate: '<b>Neto: %{customdata}</b><extra></extra>',
+            },
+        ];
+        // Barras de máximo 24px: el ancho se calcula sobre el espacio real de cada mes
+        const slot = (el.clientWidth - 70) / Math.max(1, flow.labels.length);
+        const width = Math.min(0.6, 24 / Math.max(1, slot));
+        traces[0].width = traces[1].width = width;
+        const layout = FinCharts.baseLayout(t, { barmode: 'relative' });
+        layout.xaxis = Object.assign(layout.xaxis, { type: 'category', showspikes: false });
+        layout.yaxis.zeroline = true;
+        layout.yaxis.zerolinecolor = t.axis;
+        layout.yaxis.zerolinewidth = 1;
+        Plotly.react(el, traces, layout, FinCharts.config);
+    });
+
+    // ── Histórico: una línea escalonada por producto; color fijo por entidad ──
+    let histMode = (document.querySelector('#hist-switch input:checked') || {}).value || 'accounts';
+    const renderHistory = t => {
+        const el = document.getElementById('chart-history');
+        if (!el) return;
+        const items = history[histMode] || [];
+        const traces = items.map((item, i) => {
+            const color = t.series[i % t.series.length];
+            return {
+                x: item.dates, y: item.values, type: 'scatter', mode: 'lines+markers', name: item.name,
+                line: { color, width: 2, shape: 'hv' },
+                marker: { size: 8, color, line: { color: t.surface, width: 2 } },
+                customdata: item.values.map(fmt),
+                hovertemplate: `${item.name}: <b>%{customdata}</b><extra></extra>`,
+            };
+        });
+        const legend = document.getElementById('hist-legend');
+        legend.innerHTML = '';
+        items.forEach((item, i) => {
+            const span = document.createElement('span');
+            const key = document.createElement('i');
+            key.className = 'key';
+            key.style.background = t.series[i % t.series.length];
+            span.append(key, document.createTextNode(`${item.name} · ${fmt(item.values[item.values.length - 1])}`));
+            legend.append(span);
+        });
+        Plotly.react(el, traces, FinCharts.baseLayout(t), FinCharts.config);
+    };
+    FinCharts.register(renderHistory);
+    const histSwitch = document.getElementById('hist-switch');
+    if (histSwitch) histSwitch.addEventListener('change', e => {
+        histMode = e.target.value;
+        renderHistory(FinCharts.theme());
+    });
+})();
 </script>
 {% endblock %}

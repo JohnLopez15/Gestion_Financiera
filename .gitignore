@@ -58,4 +58,4 @@ MANIFEST
 *.sublime-workspace
 .DS_Store
 Thumbs.db
-
+migrar_a_supabase.py
